@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Mágico de la Abuela</title>
+    <style>
+        body { font-family: 'Comic Sans MS', 'Fredoka One', cursive, sans-serif; background-color: #ffe6f2; color: #333; text-align: center; margin: 0; padding: 15px; padding-bottom: 50px; }
+        h1 { font-size: 35px; color: #ff1493; text-shadow: 2px 2px 0px #fff; margin-bottom: 10px; }
+        
+        /* Pedidos */
+        .pedido-pendiente { background-color: #fff; border: 5px solid #ff69b4; padding: 25px; margin: 15px auto; width: 95%; max-width: 400px; border-radius: 30px; box-shadow: 0 8px 0px #ff69b4; }
+        .cliente { font-size: 30px; margin: 0; font-weight: 900; color: #4b0082; }
+        .detalle { font-size: 24px; margin: 15px 0; font-weight: bold; color: #333; }
+        .datos-cliente { font-size: 20px; margin: 8px 0; color: #555; font-weight: bold; }
+        
+        .botones { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+        .btn-escuchar { background-color: #00bfff; color: white; font-size: 30px; padding: 20px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; box-shadow: 0 6px 0px #008b8b; }
+        .btn-entregar { background-color: #32cd32; color: white; font-size: 30px; padding: 20px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; box-shadow: 0 6px 0px #228b22; }
+        button:active { transform: translateY(6px); box-shadow: none !important; }
+        
+        hr { border: 3px dashed #ffb6c1; margin: 40px 0; }
+
+        /* Inventario Visual */
+        .seccion-inventario { max-width: 900px; margin: 0 auto; }
+        
+        /* Título para separar tamaños */
+        .titulo-separador { background-color: #fff; color: #ff1493; display: inline-block; padding: 10px 20px; border-radius: 20px; border: 3px dashed #ffb6c1; font-size: 26px; margin: 30px 0 15px 0; font-weight: bold; }
+
+        .inventario-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-bottom: 20px; }
+        .inv-card { background: white; padding: 15px; border-radius: 25px; box-shadow: 0 6px 12px rgba(0,0,0,0.15); width: 160px; position: relative; border: 4px solid #ffd700; }
+        
+        /* AQUÍ ESTÁ LA MAGIA PARA TUS IMÁGENES */
+        .img-yogur { 
+            width: 100%; 
+            height: 140px; /* Un poco más de espacio vertical */
+            object-fit: contain; /* Muestra la imagen 100% entera sin recortar NADA */
+            border-radius: 15px; 
+            background-color: transparent; /* Fondo limpio por si la imagen es estrecha */
+        }
+
+        .precio-badge { position: absolute; top: -10px; right: -10px; background: #ff4500; color: white; font-size: 28px; font-weight: 900; padding: 10px 15px; border-radius: 50%; box-shadow: 0 4px 0px #b22222; border: 3px solid white; }
+        
+        .controles { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; background: #f0f8ff; border-radius: 15px; padding: 5px; }
+        .btn-ludico { font-size: 28px; width: 45px; height: 45px; border: none; border-radius: 50%; cursor: pointer; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold; box-shadow: 0 4px 0px rgba(0,0,0,0.2); }
+        .btn-menos { background-color: #ff6347; }
+        .btn-mas { background-color: #32cd32; }
+        
+        .inv-input { width: 40px; font-size: 30px; text-align: center; border: none; background: transparent; font-weight: 900; color: #333; pointer-events: none; }
+        
+        .btn-guardar-todo { background-color: #9370db; color: white; border: none; padding: 25px; font-size: 30px; border-radius: 25px; cursor: pointer; font-weight: 900; width: 100%; margin-top: 20px; box-shadow: 0 8px 0px #4b0082; text-transform: uppercase; display: flex; justify-content: center; align-items: center; gap: 10px; }
+    </style>
+</head>
+<body>
+    
+    <h1>🔔 PEDIDOS MÁGICOS</h1>
+
+    {% if pedidos|length == 0 %}
+        <div style="color: #ff69b4; font-size: 28px; font-weight: bold; margin: 30px 0;">¡Todo tranquilo! A descansar ☕</div>
+    {% else %}
+        {% for pedido in pedidos %}
+        <div class="pedido-pendiente">
+            <p class="cliente" id="cliente-{{ pedido['id'] }}">🏠 {{ pedido['cliente'] }}</p>
+            <p class="datos-cliente">📞 {{ pedido['telefono'] or 'Sin teléfono' }}</p>
+            <p class="datos-cliente">📍 {{ pedido['ubicacion'] or 'Sin ubicación' }}</p>
+            <p class="detalle" id="detalle-{{ pedido['id'] }}">{{ pedido['descripcion'] }}</p>
+            
+            <div class="botones">
+                <button class="btn-escuchar" type="button" onclick="leerPedido({{ pedido['id'] }})">🔊 ESCUCHAR</button>
+                <form action="/entregar/{{ pedido['id'] }}">
+                    <button class="btn-entregar" type="submit">✅ LISTO</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <hr>
+
+    <div class="seccion-inventario">
+        <h1>🍓 MIS YOGURES 🍑</h1>
+        
+        <form action="/actualizar_inventario" method="POST">
+            
+            <!-- FILA SUPERIOR: SOLO LOS GRANDES ($5) -->
+            <div class="titulo-separador">🌟 GRANDES ($5)</div>
+            <div class="inventario-grid">
+                {% for prod in productos %}
+                    {% if prod['tamano'] == 'Grande' %}
+                    <div class="inv-card">
+                        <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur" class="img-yogur">
+                        <div class="precio-badge">${{ prod['precio_usd'] | int }}</div>
+                        <div class="controles">
+                            <button type="button" class="btn-ludico btn-menos" onclick="cambiarCantidad('{{ prod['id'] }}', -1)">➖</button>
+                            <input class="inv-input" id="cant-{{ prod['id'] }}" type="text" name="{{ prod['id'] }}" value="{{ prod['cantidad_disponible'] }}" readonly>
+                            <button type="button" class="btn-ludico btn-mas" onclick="cambiarCantidad('{{ prod['id'] }}', 1)">➕</button>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- FILA INFERIOR: SOLO LOS PEQUEÑOS ($1) -->
+            <div class="titulo-separador">✨ PEQUEÑOS ($1)</div>
+            <div class="inventario-grid">
+                {% for prod in productos %}
+                    {% if prod['tamano'] == 'Pequeño' %}
+                    <div class="inv-card">
+                        <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur" class="img-yogur">
+                        <div class="precio-badge">${{ prod['precio_usd'] | int }}</div>
+                        <div class="controles">
+                            <button type="button" class="btn-ludico btn-menos" onclick="cambiarCantidad('{{ prod['id'] }}', -1)">➖</button>
+                            <input class="inv-input" id="cant-{{ prod['id'] }}" type="text" name="{{ prod['id'] }}" value="{{ prod['cantidad_disponible'] }}" readonly>
+                            <button type="button" class="btn-ludico btn-mas" onclick="cambiarCantidad('{{ prod['id'] }}', 1)">➕</button>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            
+            <button class="btn-guardar-todo" type="submit">💾 GUARDAR TODO</button>
+        </form>
+    </div>
+
+    <!-- Scripts para que funcionen los botones y la voz -->
+    <script>
+        function cambiarCantidad(id, cambio) {
+            let input = document.getElementById('cant-' + id);
+            let valorActual = parseInt(input.value);
+            let nuevoValor = valorActual + cambio;
+            
+            if (nuevoValor >= 0) {
+                input.value = nuevoValor;
+            }
+        }
+
+        function leerPedido(id) {
+            let cliente = document.getElementById('cliente-' + id).innerText;
+            let detalle = document.getElementById('detalle-' + id).innerText;
+            cliente = cliente.replace('🏠', '').trim();
+            let textoHablar = "Atención, tienes un pedido de " + cliente + ". Quieren " + detalle;
+            let mensaje = new SpeechSynthesisUtterance(textoHablar);
+            mensaje.lang = 'es-ES';
+            mensaje.rate = 0.9;
+            window.speechSynthesis.speak(mensaje);
+        }
+    </script>
+</body>
+</html>

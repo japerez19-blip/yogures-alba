@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¡Pide tu Yogur de Alba! 🥣</title>
+    <style>
+        /* Fondo con un degradado suave y delicioso */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background: linear-gradient(135deg, #fff0f5 0%, #ffe4e1 100%);
+            margin: 0; 
+            padding: 40px 20px 150px 20px; 
+            min-height: 100vh;
+        }
+        
+        h1 { 
+            color: #d63384; 
+            font-size: 45px; 
+            font-weight: 900;
+            text-shadow: 2px 2px 5px rgba(214, 51, 132, 0.2);
+            margin-bottom: 5px;
+        }
+        
+        .subtitulo {
+            color: #888;
+            font-size: 18px;
+            margin-bottom: 40px;
+            font-style: italic;
+        }
+
+        /* Títulos para separar las categorías */
+        .titulo-seccion { 
+            color: #fff; 
+            background: #d63384;
+            font-size: 26px; 
+            margin: 40px auto 30px auto; 
+            display: inline-block; 
+            padding: 12px 35px; 
+            border-radius: 30px;
+            box-shadow: 0 6px 15px rgba(214, 51, 132, 0.3);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Espaciado del catálogo mucho más amplio */
+        .catalogo { 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+            gap: 40px; 
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .selector-tamano {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            margin: 0 auto 28px;
+            flex-wrap: wrap;
+        }
+
+        .btn-tamano {
+            min-width: 210px;
+            padding: 18px 28px;
+            background: #fff;
+            color: #d63384;
+            border: 3px solid #ffb6c1;
+            border-radius: 18px;
+            font-size: 21px;
+            box-shadow: 0 5px 12px rgba(214, 51, 132, 0.12);
+        }
+
+        .btn-tamano.activo,
+        .btn-tamano:hover {
+            background: #d63384;
+            color: #fff;
+            border-color: #d63384;
+        }
+
+        .tasas-bcv {
+            color: #666;
+            font-size: 14px;
+            margin: -12px auto 25px;
+        }
+
+        .precio-bs {
+            display: block;
+            color: #198754;
+            font-size: 15px;
+            margin-top: 4px;
+        }
+
+        .sabores-panel { display: none; }
+        .sabores-panel.activo { display: flex; }
+
+        /* DISEÑO DE LA TARJETA ESPACIOSA */
+        .producto { 
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06); 
+            width: 320px; 
+            padding: 30px;
+            text-align: center; 
+            position: relative;
+            backdrop-filter: blur(5px);
+            border: 2px solid transparent;
+            /* Transición suave para el efecto de movimiento */
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* ¡LA MAGIA DEL MOVIMIENTO! */
+        .producto:hover {
+            transform: translateY(-15px) scale(1.02); /* Se levanta y crece */
+            box-shadow: 0 25px 45px rgba(214, 51, 132, 0.25); /* Sombra rosada intensa */
+            border: 2px solid #ffb6c1; 
+        }
+
+        /* Contenedor de la imagen para dar aire */
+        .img-contenedor {
+            height: 240px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain; 
+            filter: drop-shadow(0px 15px 15px rgba(0,0,0,0.15)); /* Sombra bonita solo al yogur */
+            transition: transform 0.6s ease; /* Transición para la imagen */
+        }
+
+        /* La imagen flota y se inclina al hacer hover en la tarjeta */
+        .producto:hover img {
+            transform: translateY(-12px) rotate(4deg) scale(1.15);
+        }
+
+        h2 { 
+            color: #333; 
+            margin: 10px 0; 
+            font-size: 30px; 
+            font-weight: 900;
+        }
+        
+        .opcion { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: #fdf0f5; 
+            padding: 15px 20px; 
+            border-radius: 20px; 
+            margin-top: 25px; 
+            border: 1px dashed #ffb6c1;
+        }
+        
+        .opcion span { 
+            font-size: 20px; 
+            color: #d63384; 
+            font-weight: 900;
+        }
+        
+        /* BOTÓN VIBRANTE */
+        button { 
+            background: linear-gradient(45deg, #28a745, #34ce57); 
+            color: white; 
+            padding: 12px 25px; 
+            border: none; 
+            border-radius: 25px; 
+            font-size: 16px;
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
+            text-transform: uppercase;
+        }
+        
+        button:hover:not(:disabled) { 
+            background: linear-gradient(45deg, #218838, #28a745);
+            transform: scale(1.1); 
+            box-shadow: 0 8px 20px rgba(40, 167, 69, 0.5);
+        }
+        
+        button:disabled { 
+            background: #d3d3d3; 
+            color: #888;
+            box-shadow: none;
+            cursor: not-allowed; 
+            transform: none;
+        }
+        
+        /* CARRITO ESTILO CRISTAL */
+        #carrito-panel { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            background: rgba(255, 255, 255, 0.85); 
+            backdrop-filter: blur(12px); /* Desenfoque de fondo */
+            box-shadow: 0 -10px 40px rgba(214, 51, 132, 0.15); 
+            padding: 25px 20px; 
+            box-sizing: border-box; 
+            display: none; 
+            z-index: 1000; 
+            border-top-left-radius: 40px; 
+            border-top-right-radius: 40px; 
+            border-top: 2px solid #ffb6c1;
+        }
+        
+        #carrito-panel h3 { margin: 0 0 15px 0; color: #333; font-size: 26px; }
+        #total-precio { color: #d63384; font-size: 32px; font-weight: 900; }
+        
+        #input-cliente, #input-telefono, #input-ubicacion { 
+            width: 90%; 
+            max-width: 450px; 
+            padding: 18px; 
+            margin-bottom: 15px; 
+            border: 2px solid #ffb6c1; 
+            border-radius: 20px; 
+            font-size: 18px; 
+            outline: none;
+            background: rgba(255, 255, 255, 0.9);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        #input-cliente:focus, #input-telefono:focus, #input-ubicacion:focus {
+            border-color: #d63384;
+            box-shadow: 0 0 10px rgba(214, 51, 132, 0.2);
+        }
+        
+        .btn-comprar { 
+            width: 100%; 
+            max-width: 450px; 
+            padding: 20px; 
+            font-size: 24px; 
+            background: linear-gradient(45deg, #d63384, #ff1493); 
+            color: white; 
+            border: none; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            font-weight: 900; 
+            box-shadow: 0 8px 25px rgba(214, 51, 132, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-comprar:hover { 
+            background: linear-gradient(45deg, #c22975, #d63384); 
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(214, 51, 132, 0.6);
+        }
+
+        #datos-cliente { display: none; }
+
+        .btn-continuar {
+            width: 100%;
+            max-width: 450px;
+            padding: 16px;
+            margin-top: 12px;
+            background: #198754;
+        }
+
+        .btn-volver {
+            background: transparent;
+            color: #d63384;
+            box-shadow: none;
+            margin-top: 8px;
+        }
+
+        /* Direccion visual del catalogo */
+        :root {
+            --tinta: #24352d;
+            --verde: #527a5c;
+            --rosa: #e8899d;
+            --crema: #fffaf2;
+            --linea: #eadfd2;
+        }
+
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+            color: var(--tinta);
+            background:
+                radial-gradient(circle at 10% 10%, rgba(232, 137, 157, 0.18), transparent 24%),
+                radial-gradient(circle at 90% 8%, rgba(82, 122, 92, 0.18), transparent 22%),
+                var(--crema);
+            padding-top: 58px;
+        }
+
+        h1 {
+            max-width: 760px;
+            margin: 0 auto 10px;
+            color: var(--tinta);
+            font-size: clamp(42px, 7vw, 78px);
+            line-height: 0.98;
+            letter-spacing: 0;
+            text-shadow: none;
+        }
+
+        .subtitulo {
+            color: var(--verde);
+            font-family: 'Trebuchet MS', sans-serif;
+            font-size: 16px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .titulo-seccion {
+            margin: 34px auto 22px;
+            padding: 10px 18px;
+            color: var(--tinta);
+            background: transparent;
+            border-bottom: 2px solid var(--rosa);
+            border-radius: 0;
+            box-shadow: none;
+            font-family: 'Trebuchet MS', sans-serif;
+            font-size: 14px;
+            letter-spacing: 2px;
+        }
+
+        .selector-tamano { gap: 12px; }
+
+        .btn-tamano {
+            min-width: 190px;
+            color: var(--tinta);
+            border: 1px solid var(--linea);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.7);
+            font-family: 'Trebuchet MS', sans-serif;
+            font-size: 15px;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-tamano.activo,
+        .btn-tamano:hover {
+            color: white;
+            background: var(--verde);
+            border-color: var(--verde);
+        }
+
+        .tasas-bcv {
+            font-family: 'Trebuchet MS', sans-serif;
+            color: #68736b;
+        }
+
+        .catalogo { gap: 22px; max-width: 1120px; }
+
+        .producto {
+            width: 250px;
+            padding: 18px;
+            border: 1px solid var(--linea);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.82);
+            box-shadow: 0 12px 28px rgba(62, 52, 43, 0.08);
+        }
+
+        .producto:hover {
+            transform: translateY(-7px);
+            border-color: var(--rosa);
+            box-shadow: 0 18px 32px rgba(62, 52, 43, 0.14);
+        }
+
+        .img-contenedor { height: 210px; }
+
+        h2 {
+            margin: 6px 0;
+            color: var(--tinta);
+            font-size: 28px;
+        }
+
+        .opcion {
+            margin-top: 16px;
+            padding: 12px;
+            border: 1px solid var(--linea);
+            border-radius: 5px;
+            background: #fffdf9;
+        }
+
+        .opcion span {
+            color: var(--tinta);
+            font-family: 'Trebuchet MS', sans-serif;
+            font-size: 15px;
+        }
+
+        button { border-radius: 5px; font-family: 'Trebuchet MS', sans-serif; }
+
+        #carrito-panel {
+            padding: 18px 20px;
+            border-top: 1px solid var(--rosa);
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            background: rgba(255, 250, 242, 0.96);
+        }
+
+        #carrito-panel h3 {
+            color: var(--tinta);
+            font-family: 'Trebuchet MS', sans-serif;
+            font-size: 19px;
+        }
+
+        #total-precio { color: var(--verde); font-size: 25px; }
+
+        #input-cliente, #input-telefono, #input-ubicacion {
+            padding: 13px;
+            border: 1px solid var(--linea);
+            border-radius: 5px;
+            font-family: 'Trebuchet MS', sans-serif;
+        }
+
+        .btn-comprar { background: var(--rosa); border-radius: 5px; box-shadow: none; }
+        .btn-comprar:hover { background: #d76f86; box-shadow: none; }
+
+        @media (max-width: 600px) {
+            body { padding: 34px 14px 170px; }
+            .producto { width: min(100%, 290px); }
+            .btn-tamano { min-width: 145px; padding: 14px 12px; }
+        }
+
+        .enlace-formativo {
+            display: inline-block;
+            margin: -24px auto 18px;
+            color: #527a5c;
+            font: 600 13px 'Trebuchet MS', sans-serif;
+            text-decoration: none;
+            border-bottom: 1px solid #e8899d;
+        }
+
+        .enlace-formativo:hover { color: #d76f86; }
+    </style>
+</head>
+<body>
+    <h1>¡Pide tu Yogur Mágico! 🥣</h1>
+    <p class="subtitulo">Hechos con amor y fruta natural</p>
+    <a class="enlace-formativo" href="https://www.healthline.com/nutrition/7-benefits-of-yogurt" target="_blank" rel="noopener">Conoce los aportes del yogur para tu salud →</a>
+    
+    <div class="titulo-seccion">Elige el tamaño</div>
+    <div class="selector-tamano">
+        <button class="btn-tamano activo" type="button" onclick="mostrarTamano('Grande', this)">🌟 Grande · $5</button>
+        <button class="btn-tamano" type="button" onclick="mostrarTamano('Pequeño', this)">✨ Pequeño · $1</button>
+    </div>
+    {% if tasa_bcv %}
+        <p class="tasas-bcv">Precio en bolívares según el <a href="https://www.bcv.org.ve/" target="_blank" rel="noopener">BCV</a>: 1 $ = Bs {{ '%.2f'|format(tasa_bcv) }} (tasa {{ moneda_tasa_bcv }})</p>
+    {% else %}
+        <p class="tasas-bcv">Tasa del BCV no disponible ahora. Precios mostrados en dólares.</p>
+    {% endif %}
+
+    {% for tamano in ['Grande', 'Pequeño'] %}
+    <div class="catalogo sabores-panel{% if tamano == 'Grande' %} activo{% endif %}" data-tamano="{{ tamano }}">
+        {% for prod in productos %}
+            {% if prod['tamano'] == tamano %}
+            <div class="producto">
+                <div class="img-contenedor">
+                    <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur de {{ prod['sabor'] }}">
+                </div>
+                <h2>{{ prod['sabor'] }}</h2>
+                <div class="opcion">
+                    <span><b>{{ prod['tamano'] }}</b> (${{ prod['precio_usd'] | int }})
+                    {% if tasa_bcv %}<small class="precio-bs">Bs {{ '%.2f'|format(prod['precio_usd'] * tasa_bcv) }}</small>{% endif %}</span>
+                    {% if prod['cantidad_disponible'] > 0 %}
+                        <button type="button" onclick="agregarAlCarrito({{ prod['id'] }}, '{{ prod['sabor'] }}', '{{ prod['tamano'] }}', {{ prod['precio_usd'] }}, {{ prod['cantidad_disponible'] }})">+ Agregar</button>
+                    {% else %}
+                        <button type="button" disabled>Agotado</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <!-- Panel flotante del carrito -->
+    <div id="carrito-panel">
+        <h3>🛒 Tu Carrito: <span id="total-precio">$0.00</span><small id="total-bs"></small></h3>
+        <div id="lista-carrito" style="margin-bottom: 15px; color: #555; font-size: 18px; font-weight: bold; line-height: 1.5;"></div>
+        <div id="resumen-carrito">
+            <button class="btn-comprar btn-continuar" type="button" onclick="mostrarIdentificacion()">Continuar con mis datos</button>
+        </div>
+        <div id="datos-cliente">
+            <input type="text" id="input-cliente" placeholder="Nombre completo" required>
+            <input type="tel" id="input-telefono" placeholder="Número de teléfono" required>
+            <input type="text" id="input-ubicacion" placeholder="Apartamento o zona donde vives" required>
+            <button class="btn-comprar" type="button" onclick="enviarPedido()">Finalizar Pedido</button>
+            <button class="btn-volver" type="button" onclick="volverAlCarrito()">← Revisar carrito</button>
+        </div>
+    </div>
+
+    <script>
+        let carrito = {}; 
+        let total = 0;
+        const tasaBcv = {{ tasa_bcv|tojson }};
+
+        function mostrarTamano(tamano, boton) {
+            document.querySelectorAll('.sabores-panel').forEach(panel => {
+                panel.classList.toggle('activo', panel.dataset.tamano === tamano);
+            });
+            document.querySelectorAll('.btn-tamano').forEach(opcion => opcion.classList.remove('activo'));
+            boton.classList.add('activo');
+        }
+
+        function agregarAlCarrito(id, sabor, tamano, precio, max_disponible) {
+            let cantidad_actual = carrito[id] ? carrito[id].cantidad : 0;
+
+            if (cantidad_actual + 1 > max_disponible) {
+                alert(`¡Uy! Por ahora solo tenemos ${max_disponible} unidades disponibles de ${sabor} ${tamano}.`);
+                return;
+            }
+
+            if (!carrito[id]) {
+                carrito[id] = { id: id, sabor: sabor, tamano: tamano, precio: precio, cantidad: 1 };
+            } else {
+                carrito[id].cantidad += 1;
+            }
+
+            total += precio;
+            actualizarCarritoUI();
+        }
+
+        function actualizarCarritoUI() {
+            let panel = document.getElementById('carrito-panel');
+            let lista = document.getElementById('lista-carrito');
+            let lblTotal = document.getElementById('total-precio');
+            
+            let itemsHTML = [];
+            for (let key in carrito) {
+                let item = carrito[key];
+                itemsHTML.push(`🍓 ${item.cantidad}x ${item.sabor} ${item.tamano}`);
+            }
+
+            if (itemsHTML.length > 0) {
+                panel.style.display = 'block';
+                lista.innerHTML = itemsHTML.join('<br>');
+                lblTotal.innerText = '$' + total.toFixed(2);
+                document.getElementById('total-bs').innerText = tasaBcv
+                    ? ' · Bs ' + (total * tasaBcv).toFixed(2)
+                    : '';
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+
+        function mostrarIdentificacion() {
+            if (Object.keys(carrito).length === 0) {
+                return;
+            }
+            document.getElementById('resumen-carrito').style.display = 'none';
+            document.getElementById('datos-cliente').style.display = 'block';
+            document.getElementById('input-cliente').focus();
+        }
+
+        function volverAlCarrito() {
+            document.getElementById('datos-cliente').style.display = 'none';
+            document.getElementById('resumen-carrito').style.display = 'block';
+        }
+
+        function enviarPedido() {
+            let cliente = document.getElementById('input-cliente').value.trim();
+            let telefono = document.getElementById('input-telefono').value.trim();
+            let ubicacion = document.getElementById('input-ubicacion').value.trim();
+            if (!cliente || !telefono || !ubicacion || Object.keys(carrito).length === 0) {
+                alert("Completa tus datos y agrega al menos un yogur.");
+                return;
+            }
+
+            let itemsArray = Object.values(carrito);
+            
+            fetch('/comprar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cliente: cliente, telefono: telefono, ubicacion: ubicacion, carrito: itemsArray })
+            })
+            .then(async response => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    alert(data.error || "No se pudo enviar el pedido.");
+                    return;
+                }
+                alert(data.mensaje); 
+                window.location.reload(); 
+            });
+        }
+    </script>
+</body>
+</html>
