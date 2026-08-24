@@ -136,7 +136,11 @@ def iniciar_base_datos():
         for producto in inventario:
             ejecutar(c, consulta_producto, producto)
 
-    ejecutar(c, "UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' WHERE sabor = 'Guanábana'")
+    ejecutar(
+        c,
+        "UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' "
+        "WHERE sabor IN ('Guanábana', 'Guanabana')",
+    )
     ejecutar(c, "SELECT sabor, tamano FROM productos")
     productos_existentes = {(fila["sabor"], fila["tamano"]) if DATABASE_URL else (fila[0], fila[1]) for fila in c.fetchall()}
     uva = [
