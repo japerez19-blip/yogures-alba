@@ -94,6 +94,9 @@ def iniciar_base_datos():
     conn.commit()
     conn.close()
 
+
+iniciar_base_datos()
+
 @app.route('/')
 def catalogo():
     conn = sqlite3.connect(DB_NAME)
