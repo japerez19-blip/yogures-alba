@@ -9,7 +9,7 @@ import ssl
 from urllib.request import Request, urlopen
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "clave-local-no-usar-en-produccion")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
