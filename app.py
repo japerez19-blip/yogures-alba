@@ -9,6 +9,7 @@ import secrets
 import ssl
 import time
 from urllib.request import Request, urlopen
+from dotenv import load_dotenv
 
 try:
     import psycopg2
@@ -16,6 +17,8 @@ try:
 except ImportError:
     psycopg2 = None
     RealDictCursor = None
+
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
@@ -57,7 +60,10 @@ def conectar_base_datos():
 def ejecutar(cursor, consulta, parametros=()):
     if DATABASE_URL:
         consulta = consulta.replace("?", "%s")
-    cursor.execute(consulta, parametros)
+    if parametros:
+        cursor.execute(consulta, parametros)
+    else:
+        cursor.execute(consulta)
 
 
 def migrar_guanabana_a_uva(cursor):
