@@ -66,12 +66,11 @@ def ejecutar(cursor, consulta, parametros=()):
         cursor.execute(consulta)
 
 
-def migrar_guanabana_a_uva(cursor):
+def migrar_uva_a_guanabana(cursor):
     ejecutar(
         cursor,
-        "UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' "
-        "WHERE LOWER(TRIM(sabor)) LIKE 'guanaban%' "
-        "OR LOWER(TRIM(sabor)) LIKE 'guanábana%'",
+        "UPDATE productos SET sabor = 'Guanábana', imagen = 'guanabana.jpg' "
+        "WHERE LOWER(TRIM(sabor)) LIKE 'uva%'",
     )
 
 
@@ -144,22 +143,22 @@ def iniciar_base_datos():
             ('Piña', 'Grande', 5.00, 2, 'pina.jpg'),
             ('Natural', 'Pequeño', 1.00, 1, 'natural.jpg'), 
             ('Natural', 'Grande', 5.00, 2, 'natural.jpg'),
-            ('Uva', 'Pequeño', 1.00, 0, 'uva.jpg'),
-            ('Uva', 'Grande', 5.00, 0, 'uva.jpg')
+            ('Guanábana', 'Pequeño', 1.00, 0, 'guanabana.jpg'),
+            ('Guanábana', 'Grande', 5.00, 0, 'guanabana.jpg')
         ]
         consulta_producto = "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)"
         for producto in inventario:
             ejecutar(c, consulta_producto, producto)
 
-    migrar_guanabana_a_uva(c)
+    migrar_uva_a_guanabana(c)
     ejecutar(c, "SELECT sabor, tamano FROM productos")
     productos_existentes = {(fila["sabor"], fila["tamano"]) if DATABASE_URL else (fila[0], fila[1]) for fila in c.fetchall()}
-    uva = [
-        ('Uva', 'Pequeño', 1.00, 0, 'uva.jpg'),
-        ('Uva', 'Grande', 5.00, 0, 'uva.jpg'),
+    guanabana = [
+        ('Guanábana', 'Pequeño', 1.00, 0, 'guanabana.jpg'),
+        ('Guanábana', 'Grande', 5.00, 0, 'guanabana.jpg'),
     ]
     consulta_producto = "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)"
-    for producto in uva:
+    for producto in guanabana:
         if (producto[0], producto[1]) not in productos_existentes:
             ejecutar(c, consulta_producto, producto)
         
@@ -172,7 +171,7 @@ iniciar_base_datos()
 @app.route('/')
 def catalogo():
     conn = conectar_base_datos()
-    migrar_guanabana_a_uva(conn.cursor())
+    migrar_uva_a_guanabana(conn.cursor())
     conn.commit()
     c = conn.cursor()
     ejecutar(c, "SELECT * FROM productos")
