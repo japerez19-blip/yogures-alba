@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso de la abuela</title>
+    <style>
+        :root { --tinta: #24352d; --verde: #527a5c; --rosa: #e8899d; --crema: #fffaf2; --linea: #eadfd2; }
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; margin: 0; padding: 24px; display: grid; place-items: center; color: var(--tinta); background: radial-gradient(circle at 12% 12%, rgba(232,137,157,.2), transparent 30%), radial-gradient(circle at 88% 10%, rgba(82,122,92,.2), transparent 28%), var(--crema); font-family: Georgia, 'Times New Roman', serif; }
+        main { width: min(100%, 420px); padding: 32px; background: rgba(255,255,255,.9); border: 1px solid var(--linea); border-radius: 8px; box-shadow: 0 18px 40px rgba(62,52,43,.12); }
+        h1 { margin: 0 0 8px; font-size: 32px; }
+        p { margin: 0 0 24px; color: #68736b; font-family: 'Trebuchet MS', sans-serif; }
+        label { display: block; margin-bottom: 8px; font: 600 14px 'Trebuchet MS', sans-serif; }
+        input { width: 100%; padding: 13px; border: 1px solid var(--linea); border-radius: 5px; font-size: 17px; }
+        input:focus { outline: 2px solid var(--rosa); border-color: var(--rosa); }
+        button { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 5px; color: white; background: var(--verde); font: 600 16px 'Trebuchet MS', sans-serif; cursor: pointer; }
+        .error { margin: 16px 0 0; color: #a33d4f; font-family: 'Trebuchet MS', sans-serif; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Panel de la abuela</h1>
+        <p>Ingresa la contraseña para ver los pedidos.</p>
+        {% if not configurada %}
+            <p class="error">El acceso todavía no está configurado. Define ADMIN_PASSWORD en Render.</p>
+        {% endif %}
+        {% if error %}<p class="error">{{ error }}</p>{% endif %}
+        <form method="post">
+            <label for="contrasena">Contraseña</label>
+            <input id="contrasena" name="contrasena" type="password" autocomplete="current-password" required autofocus>
+            <button type="submit">Entrar</button>
+        </form>
+    </main>
+</body>
+</html>

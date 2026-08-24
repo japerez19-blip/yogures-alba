@@ -1,14 +1,24 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import sqlite3
 import datetime
 import html
+import hmac
+import os
 import re
 import ssl
 from urllib.request import Request, urlopen
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "clave-local-no-usar-en-produccion")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("RENDER", "").lower() == "true",
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=30),
+)
 DB_NAME = "yogures_v2.db"
 BCV_URL = "https://www.bcv.org.ve/"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 
 
 def obtener_tasas_bcv():
@@ -166,6 +176,8 @@ def comprar():
 
 @app.route('/abuela')
 def panel_abuela():
+    if not session.get("abuela_autenticada"):
+        return redirect(url_for("login_abuela"))
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -176,8 +188,27 @@ def panel_abuela():
     conn.close()
     return render_template('abuela.html', pedidos=pedidos, productos=productos)
 
+@app.route('/abuela/login', methods=['GET', 'POST'])
+def login_abuela():
+    if request.method == 'POST':
+        contrasena = request.form.get('contrasena', '')
+        if ADMIN_PASSWORD and hmac.compare_digest(contrasena, ADMIN_PASSWORD):
+            session.clear()
+            session.permanent = True
+            session['abuela_autenticada'] = True
+            return redirect(url_for('panel_abuela'))
+        return render_template('login_abuela.html', error='La contraseña no es correcta.')
+    return render_template('login_abuela.html', configurada=bool(ADMIN_PASSWORD))
+
+@app.route('/abuela/logout', methods=['POST'])
+def logout_abuela():
+    session.clear()
+    return redirect(url_for('login_abuela'))
+
 @app.route('/entregar/<int:id_pedido>')
 def entregar(id_pedido):
+    if not session.get("abuela_autenticada"):
+        return redirect(url_for("login_abuela"))
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("UPDATE pedidos SET estado = 'ENTREGADO' WHERE id = ?", (id_pedido,))
@@ -188,6 +219,8 @@ def entregar(id_pedido):
 # ESTA ES LA NUEVA RUTA PROFESIONAL (Actualiza todo de golpe)
 @app.route('/actualizar_inventario', methods=['POST'])
 def actualizar_inventario():
+    if not session.get("abuela_autenticada"):
+        return redirect(url_for("login_abuela"))
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     # Recorre todas las cajitas que la abuela llenó en la pantalla

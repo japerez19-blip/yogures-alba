@@ -54,6 +54,9 @@
 <body>
     
     <h1>🔔 PEDIDOS MÁGICOS</h1>
+    <form action="{{ url_for('logout_abuela') }}" method="POST">
+        <button type="submit">🔒 CERRAR SESIÓN</button>
+    </form>
 
     {% if pedidos|length == 0 %}
         <div style="color: #ff69b4; font-size: 28px; font-weight: bold; margin: 30px 0;">¡Todo tranquilo! A descansar ☕</div>
