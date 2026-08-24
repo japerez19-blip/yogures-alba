@@ -55,6 +55,7 @@
     
     <h1>🔔 PEDIDOS MÁGICOS</h1>
     <form action="{{ url_for('logout_abuela') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit">🔒 CERRAR SESIÓN</button>
     </form>
 
@@ -70,7 +71,8 @@
             
             <div class="botones">
                 <button class="btn-escuchar" type="button" onclick="leerPedido({{ pedido['id'] }})">🔊 ESCUCHAR</button>
-                <form action="/entregar/{{ pedido['id'] }}">
+                <form action="/entregar/{{ pedido['id'] }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button class="btn-entregar" type="submit">✅ LISTO</button>
                 </form>
             </div>
@@ -84,6 +86,7 @@
         <h1>🍓 MIS YOGURES 🍑</h1>
         
         <form action="/actualizar_inventario" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             
             <!-- FILA SUPERIOR: SOLO LOS GRANDES ($5) -->
             <div class="titulo-separador">🌟 GRANDES ($5)</div>

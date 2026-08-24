@@ -5,7 +5,9 @@ import html
 import hmac
 import os
 import re
+import secrets
 import ssl
+import time
 from urllib.request import Request, urlopen
 
 app = Flask(__name__)
@@ -19,6 +21,19 @@ app.config.update(
 DB_NAME = "yogures_v2.db"
 BCV_URL = "https://www.bcv.org.ve/"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+intentos_login = {}
+
+
+def token_csrf():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+    return session["csrf_token"]
+
+
+def csrf_valido():
+    return hmac.compare_digest(
+        request.form.get("csrf_token", ""), session.get("csrf_token", "")
+    )
 
 
 def obtener_tasas_bcv():
@@ -186,29 +201,40 @@ def panel_abuela():
     c.execute("SELECT * FROM productos")
     productos = c.fetchall()
     conn.close()
-    return render_template('abuela.html', pedidos=pedidos, productos=productos)
+    return render_template('abuela.html', pedidos=pedidos, productos=productos, csrf_token=token_csrf())
 
 @app.route('/abuela/login', methods=['GET', 'POST'])
 def login_abuela():
     if request.method == 'POST':
+        ahora = time.monotonic()
+        ip = request.remote_addr or "desconocida"
+        intentos_recientes = [marca for marca in intentos_login.get(ip, []) if ahora - marca < 900]
+        if len(intentos_recientes) >= 5:
+            return render_template('login_abuela.html', error='Demasiados intentos. Espera 15 minutos.')
         contrasena = request.form.get('contrasena', '')
         if ADMIN_PASSWORD and hmac.compare_digest(contrasena, ADMIN_PASSWORD):
+            intentos_login.pop(ip, None)
             session.clear()
             session.permanent = True
             session['abuela_autenticada'] = True
             return redirect(url_for('panel_abuela'))
+        intentos_login[ip] = intentos_recientes + [ahora]
         return render_template('login_abuela.html', error='La contraseña no es correcta.')
     return render_template('login_abuela.html', configurada=bool(ADMIN_PASSWORD))
 
 @app.route('/abuela/logout', methods=['POST'])
 def logout_abuela():
+    if not csrf_valido():
+        return "Solicitud no válida", 400
     session.clear()
     return redirect(url_for('login_abuela'))
 
-@app.route('/entregar/<int:id_pedido>')
+@app.route('/entregar/<int:id_pedido>', methods=['POST'])
 def entregar(id_pedido):
     if not session.get("abuela_autenticada"):
         return redirect(url_for("login_abuela"))
+    if not csrf_valido():
+        return "Solicitud no válida", 400
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("UPDATE pedidos SET estado = 'ENTREGADO' WHERE id = ?", (id_pedido,))
@@ -221,6 +247,8 @@ def entregar(id_pedido):
 def actualizar_inventario():
     if not session.get("abuela_autenticada"):
         return redirect(url_for("login_abuela"))
+    if not csrf_valido():
+        return "Solicitud no válida", 400
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     # Recorre todas las cajitas que la abuela llenó en la pantalla
