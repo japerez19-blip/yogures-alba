@@ -73,21 +73,22 @@ def iniciar_base_datos():
             ('Piña', 'Grande', 5.00, 2, 'pina.jpg'),
             ('Natural', 'Pequeño', 1.00, 1, 'natural.jpg'), 
             ('Natural', 'Grande', 5.00, 2, 'natural.jpg'),
-            ('Guanábana', 'Pequeño', 1.00, 0, 'guanabana.jpg'),
-            ('Guanábana', 'Grande', 5.00, 0, 'guanabana.jpg')
+            ('Uva', 'Pequeño', 1.00, 0, 'uva.jpg'),
+            ('Uva', 'Grande', 5.00, 0, 'uva.jpg')
         ]
         c.executemany("INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)", inventario)
 
+    c.execute("UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' WHERE sabor = 'Guanábana'")
     c.execute("SELECT sabor, tamano FROM productos")
     productos_existentes = {(fila[0], fila[1]) for fila in c.fetchall()}
-    guanabana = [
-        ('Guanábana', 'Pequeño', 1.00, 0, 'guanabana.jpg'),
-        ('Guanábana', 'Grande', 5.00, 0, 'guanabana.jpg'),
+    uva = [
+        ('Uva', 'Pequeño', 1.00, 0, 'uva.jpg'),
+        ('Uva', 'Grande', 5.00, 0, 'uva.jpg'),
     ]
     c.executemany(
         "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) "
         "VALUES (?, ?, ?, ?, ?)",
-        [producto for producto in guanabana if (producto[0], producto[1]) not in productos_existentes],
+        [producto for producto in uva if (producto[0], producto[1]) not in productos_existentes],
     )
         
     conn.commit()
