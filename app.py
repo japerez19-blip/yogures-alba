@@ -60,6 +60,15 @@ def ejecutar(cursor, consulta, parametros=()):
     cursor.execute(consulta, parametros)
 
 
+def migrar_guanabana_a_uva(cursor):
+    ejecutar(
+        cursor,
+        "UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' "
+        "WHERE LOWER(TRIM(sabor)) LIKE 'guanaban%' "
+        "OR LOWER(TRIM(sabor)) LIKE 'guanábana%'",
+    )
+
+
 def obtener_tasas_bcv():
     try:
         solicitud = Request(BCV_URL, headers={"User-Agent": "Mozilla/5.0"})
@@ -136,11 +145,7 @@ def iniciar_base_datos():
         for producto in inventario:
             ejecutar(c, consulta_producto, producto)
 
-    ejecutar(
-        c,
-        "UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' "
-        "WHERE LOWER(TRIM(sabor)) IN ('guanábana', 'guanabana')",
-    )
+    migrar_guanabana_a_uva(c)
     ejecutar(c, "SELECT sabor, tamano FROM productos")
     productos_existentes = {(fila["sabor"], fila["tamano"]) if DATABASE_URL else (fila[0], fila[1]) for fila in c.fetchall()}
     uva = [
@@ -160,8 +165,9 @@ iniciar_base_datos()
 
 @app.route('/')
 def catalogo():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row 
+    conn = conectar_base_datos()
+    migrar_guanabana_a_uva(conn.cursor())
+    conn.commit()
     c = conn.cursor()
     ejecutar(c, "SELECT * FROM productos")
     productos = c.fetchall()
