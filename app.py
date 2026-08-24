@@ -1,14 +1,21 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
-import sqlite3
 import datetime
 import html
 import hmac
 import os
+import sqlite3
 import re
 import secrets
 import ssl
 import time
 from urllib.request import Request, urlopen
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+    RealDictCursor = None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
@@ -19,6 +26,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=30),
 )
 DB_NAME = "yogures_v2.db"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 BCV_URL = "https://www.bcv.org.ve/"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 intentos_login = {}
@@ -34,6 +42,22 @@ def csrf_valido():
     return hmac.compare_digest(
         request.form.get("csrf_token", ""), session.get("csrf_token", "")
     )
+
+
+def conectar_base_datos():
+    if DATABASE_URL:
+        if psycopg2 is None:
+            raise RuntimeError("Falta instalar psycopg2-binary para usar Supabase")
+        return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def ejecutar(cursor, consulta, parametros=()):
+    if DATABASE_URL:
+        consulta = consulta.replace("?", "%s")
+    cursor.execute(consulta, parametros)
 
 
 def obtener_tasas_bcv():
@@ -62,33 +86,40 @@ def obtener_tasas_bcv():
         return None, None
 
 def iniciar_base_datos():
-    conn = sqlite3.connect(DB_NAME)
+    conn = conectar_base_datos()
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS productos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo_id = "SERIAL PRIMARY KEY" if DATABASE_URL else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    tipo_fecha = "TIMESTAMP NOT NULL" if DATABASE_URL else "DATETIME NOT NULL"
+    ejecutar(c, f'''CREATE TABLE IF NOT EXISTS productos (
+                    id {tipo_id},
                     sabor TEXT NOT NULL,
                     tamano TEXT NOT NULL,
                     precio_usd REAL NOT NULL,
                     cantidad_disponible INTEGER NOT NULL,
                     imagen TEXT NOT NULL
                 )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS pedidos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ejecutar(c, f'''CREATE TABLE IF NOT EXISTS pedidos (
+                    id {tipo_id},
                     cliente TEXT NOT NULL,
                     descripcion TEXT NOT NULL,
                     telefono TEXT NOT NULL DEFAULT '',
                     ubicacion TEXT NOT NULL DEFAULT '',
                     estado TEXT DEFAULT 'PENDIENTE', 
-                    fecha DATETIME NOT NULL
+                    fecha {tipo_fecha}
                 )''')
-    c.execute("PRAGMA table_info(pedidos)")
-    columnas_pedidos = {columna[1] for columna in c.fetchall()}
+    if DATABASE_URL:
+        ejecutar(c, "SELECT column_name FROM information_schema.columns WHERE table_name = 'pedidos'")
+        columnas_pedidos = {columna["column_name"] for columna in c.fetchall()}
+    else:
+        ejecutar(c, "PRAGMA table_info(pedidos)")
+        columnas_pedidos = {columna[1] for columna in c.fetchall()}
     if 'telefono' not in columnas_pedidos:
-        c.execute("ALTER TABLE pedidos ADD COLUMN telefono TEXT NOT NULL DEFAULT ''")
+        ejecutar(c, "ALTER TABLE pedidos ADD COLUMN telefono TEXT NOT NULL DEFAULT ''")
     if 'ubicacion' not in columnas_pedidos:
-        c.execute("ALTER TABLE pedidos ADD COLUMN ubicacion TEXT NOT NULL DEFAULT ''")
-    c.execute("SELECT COUNT(*) FROM productos")
-    if c.fetchone()[0] == 0:
+        ejecutar(c, "ALTER TABLE pedidos ADD COLUMN ubicacion TEXT NOT NULL DEFAULT ''")
+    ejecutar(c, "SELECT COUNT(*) AS total FROM productos")
+    total_productos = c.fetchone()["total"] if DATABASE_URL else c.fetchone()[0]
+    if total_productos == 0:
         inventario = [
             ('Fresa', 'Pequeño', 1.00, 2, 'fresa.jpg'),
             ('Fresa', 'Grande', 5.00, 2, 'fresa.jpg'),
@@ -101,20 +132,21 @@ def iniciar_base_datos():
             ('Uva', 'Pequeño', 1.00, 0, 'uva.jpg'),
             ('Uva', 'Grande', 5.00, 0, 'uva.jpg')
         ]
-        c.executemany("INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)", inventario)
+        consulta_producto = "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)"
+        for producto in inventario:
+            ejecutar(c, consulta_producto, producto)
 
-    c.execute("UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' WHERE sabor = 'Guanábana'")
-    c.execute("SELECT sabor, tamano FROM productos")
-    productos_existentes = {(fila[0], fila[1]) for fila in c.fetchall()}
+    ejecutar(c, "UPDATE productos SET sabor = 'Uva', imagen = 'uva.jpg' WHERE sabor = 'Guanábana'")
+    ejecutar(c, "SELECT sabor, tamano FROM productos")
+    productos_existentes = {(fila["sabor"], fila["tamano"]) if DATABASE_URL else (fila[0], fila[1]) for fila in c.fetchall()}
     uva = [
         ('Uva', 'Pequeño', 1.00, 0, 'uva.jpg'),
         ('Uva', 'Grande', 5.00, 0, 'uva.jpg'),
     ]
-    c.executemany(
-        "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) "
-        "VALUES (?, ?, ?, ?, ?)",
-        [producto for producto in uva if (producto[0], producto[1]) not in productos_existentes],
-    )
+    consulta_producto = "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)"
+    for producto in uva:
+        if (producto[0], producto[1]) not in productos_existentes:
+            ejecutar(c, consulta_producto, producto)
         
     conn.commit()
     conn.close()
@@ -127,7 +159,7 @@ def catalogo():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row 
     c = conn.cursor()
-    c.execute("SELECT * FROM productos")
+    ejecutar(c, "SELECT * FROM productos")
     productos = c.fetchall()
     conn.close()
     tasa_usd_bcv, tasa_eur_bcv = obtener_tasas_bcv()
@@ -159,7 +191,7 @@ def comprar():
         return jsonify({"error": "Completa tus datos y agrega al menos un yogur."}), 400
     descripcion_pedido = []
     
-    conn = sqlite3.connect(DB_NAME)
+    conn = conectar_base_datos()
     c = conn.cursor()
 
     for item in carrito:
@@ -167,7 +199,7 @@ def comprar():
         cant = item['cantidad']
         sabor = item['sabor']
         tamano = item['tamano']
-        c.execute(
+        ejecutar(c,
             "UPDATE productos SET cantidad_disponible = cantidad_disponible - ? "
             "WHERE id = ? AND cantidad_disponible >= ?",
             (cant, id_prod, cant),
@@ -181,7 +213,7 @@ def comprar():
     descripcion_final = " + ".join(descripcion_pedido)
     fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     
-    c.execute(
+    ejecutar(c,
         "INSERT INTO pedidos (cliente, descripcion, telefono, ubicacion, fecha) VALUES (?, ?, ?, ?, ?)",
         (cliente, descripcion_final, telefono, ubicacion, fecha),
     )
@@ -193,12 +225,11 @@ def comprar():
 def panel_abuela():
     if not session.get("abuela_autenticada"):
         return redirect(url_for("login_abuela"))
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
+    conn = conectar_base_datos()
     c = conn.cursor()
-    c.execute("SELECT * FROM pedidos WHERE estado = 'PENDIENTE'")
+    ejecutar(c, "SELECT * FROM pedidos WHERE estado = 'PENDIENTE'")
     pedidos = c.fetchall()
-    c.execute("SELECT * FROM productos")
+    ejecutar(c, "SELECT * FROM productos")
     productos = c.fetchall()
     conn.close()
     return render_template('abuela.html', pedidos=pedidos, productos=productos, csrf_token=token_csrf())
@@ -235,9 +266,9 @@ def entregar(id_pedido):
         return redirect(url_for("login_abuela"))
     if not csrf_valido():
         return "Solicitud no válida", 400
-    conn = sqlite3.connect(DB_NAME)
+    conn = conectar_base_datos()
     c = conn.cursor()
-    c.execute("UPDATE pedidos SET estado = 'ENTREGADO' WHERE id = ?", (id_pedido,))
+    ejecutar(c, "UPDATE pedidos SET estado = 'ENTREGADO' WHERE id = ?", (id_pedido,))
     conn.commit()
     conn.close()
     return redirect(url_for('panel_abuela'))
@@ -249,7 +280,7 @@ def actualizar_inventario():
         return redirect(url_for("login_abuela"))
     if not csrf_valido():
         return "Solicitud no válida", 400
-    conn = sqlite3.connect(DB_NAME)
+    conn = conectar_base_datos()
     c = conn.cursor()
     # Recorre todas las cajitas que la abuela llenó en la pantalla
     for id_producto, nueva_cantidad in request.form.items():
@@ -257,7 +288,7 @@ def actualizar_inventario():
             nueva_cantidad = int(nueva_cantidad)
         except ValueError:
             continue
-        c.execute(
+        ejecutar(c,
             "UPDATE productos SET cantidad_disponible = ? WHERE id = ?",
             (max(0, nueva_cantidad), id_producto),
         )
