@@ -8,6 +8,7 @@ import re
 import secrets
 import ssl
 import time
+import unicodedata
 from urllib.request import Request, urlopen
 from dotenv import load_dotenv
 
@@ -100,11 +101,26 @@ def ejecutar(cursor, consulta, parametros=()):
 
 
 def migrar_uva_a_guanabana(cursor):
-    ejecutar(
-        cursor,
-        "UPDATE productos SET sabor = 'Guanábana', imagen = 'guanabana.jpg' "
-        "WHERE LOWER(TRIM(sabor)) LIKE 'uva%'",
-    )
+    ejecutar(cursor, "SELECT id, sabor, tamano FROM productos")
+    for producto in cursor.fetchall():
+        sabor = producto["sabor"] if DATABASE_URL else producto[1]
+        tamano = producto["tamano"] if DATABASE_URL else producto[2]
+        if sabor.lower().strip().startswith("uva"):
+            sabor = "Guanábana"
+        imagen = imagen_producto(sabor, tamano)
+        id_producto = producto["id"] if DATABASE_URL else producto[0]
+        ejecutar(
+            cursor,
+            "UPDATE productos SET sabor = ?, imagen = ? WHERE id = ?",
+            (sabor, imagen, id_producto),
+        )
+
+
+def imagen_producto(sabor, tamano):
+    nombre = unicodedata.normalize("NFKD", sabor).encode("ascii", "ignore").decode().lower()
+    nombre = {"guanabana": "guanabana"}.get(nombre, nombre)
+    sufijo = "pequeno" if tamano == "Pequeño" else ""
+    return f"{nombre}{sufijo}.jpg"
 
 
 def obtener_tasas_bcv():
@@ -168,15 +184,15 @@ def iniciar_base_datos():
     total_productos = c.fetchone()["total"] if DATABASE_URL else c.fetchone()[0]
     if total_productos == 0:
         inventario = [
-            ('Fresa', 'Pequeño', 1.00, 2, 'fresa.jpg'),
+            ('Fresa', 'Pequeño', 1.00, 2, 'fresapequeno.jpg'),
             ('Fresa', 'Grande', 5.00, 2, 'fresa.jpg'),
-            ('Durazno', 'Pequeño', 1.00, 2, 'durazno.jpg'),
+            ('Durazno', 'Pequeño', 1.00, 2, 'duraznopequeno.jpg'),
             ('Durazno', 'Grande', 5.00, 2, 'durazno.jpg'),
-            ('Piña', 'Pequeño', 1.00, 2, 'pina.jpg'),
+            ('Piña', 'Pequeño', 1.00, 2, 'pinapequeno.jpg'),
             ('Piña', 'Grande', 5.00, 2, 'pina.jpg'),
-            ('Natural', 'Pequeño', 1.00, 1, 'natural.jpg'), 
+            ('Natural', 'Pequeño', 1.00, 1, 'naturalpequeno.jpg'),
             ('Natural', 'Grande', 5.00, 2, 'natural.jpg'),
-            ('Guanábana', 'Pequeño', 1.00, 0, 'guanabana.jpg'),
+            ('Guanábana', 'Pequeño', 1.00, 0, 'guanabanapequeno.jpg'),
             ('Guanábana', 'Grande', 5.00, 0, 'guanabana.jpg')
         ]
         consulta_producto = "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)"
@@ -187,7 +203,7 @@ def iniciar_base_datos():
     ejecutar(c, "SELECT sabor, tamano FROM productos")
     productos_existentes = {(fila["sabor"], fila["tamano"]) if DATABASE_URL else (fila[0], fila[1]) for fila in c.fetchall()}
     guanabana = [
-        ('Guanábana', 'Pequeño', 1.00, 0, 'guanabana.jpg'),
+        ('Guanábana', 'Pequeño', 1.00, 0, 'guanabanapequeno.jpg'),
         ('Guanábana', 'Grande', 5.00, 0, 'guanabana.jpg'),
     ]
     consulta_producto = "INSERT INTO productos (sabor, tamano, precio_usd, cantidad_disponible, imagen) VALUES (?, ?, ?, ?, ?)"
