@@ -49,6 +49,27 @@
         .inv-input { width: 40px; font-size: 30px; text-align: center; border: none; background: transparent; font-weight: 900; color: #333; pointer-events: none; }
         
         .btn-guardar-todo { background-color: #9370db; color: white; border: none; padding: 25px; font-size: 30px; border-radius: 25px; cursor: pointer; font-weight: 900; width: 100%; margin-top: 20px; box-shadow: 0 8px 0px #4b0082; text-transform: uppercase; display: flex; justify-content: center; align-items: center; gap: 10px; }
+        .inv-card { transition: transform .18s ease, box-shadow .18s ease; }
+        .inv-card:focus-within, .inv-card:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,.18); }
+        .inv-card[data-stock="0"] { border-color: #d9534f; opacity: .78; }
+        .inv-card[data-stock="low"] { border-color: #f0ad4e; }
+        @media (max-width: 600px) {
+            body { padding: 12px 8px 32px; }
+            h1 { font-size: 30px; }
+            .pedido-pendiente { max-width: 100%; padding: 18px 14px; border-width: 4px; }
+            .cliente { font-size: 26px; }
+            .detalle { font-size: 21px; }
+            .datos-cliente { font-size: 18px; }
+            .btn-escuchar, .btn-entregar { min-height: 64px; font-size: 24px; }
+            .seccion-inventario { width: 100%; }
+            .inventario-grid { gap: 10px; }
+            .inv-card { width: calc(50% - 5px); padding: 10px; }
+            .img-yogur { height: 125px; }
+            .precio-badge { font-size: 22px; padding: 7px 10px; }
+            .btn-ludico { width: 48px; height: 48px; }
+            .inv-input { font-size: 30px; }
+            .btn-guardar-todo { min-height: 70px; font-size: 25px; }
+        }
     </style>
 </head>
 <body>
@@ -93,13 +114,13 @@
             <div class="inventario-grid">
                 {% for prod in productos %}
                     {% if prod['tamano'] == 'Grande' %}
-                    <div class="inv-card">
-                        <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur" class="img-yogur">
+                    <div class="inv-card" data-stock="{% if prod['cantidad_disponible'] == 0 %}0{% elif prod['cantidad_disponible'] <= 2 %}low{% else %}ok{% endif %}">
+                        <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur de {{ prod['sabor'] }} grande" class="img-yogur">
                         <div class="precio-badge">${{ prod['precio_usd'] | int }}</div>
                         <div class="controles">
-                            <button type="button" class="btn-ludico btn-menos" onclick="cambiarCantidad('{{ prod['id'] }}', -1)">➖</button>
+                            <button type="button" class="btn-ludico btn-menos" aria-label="Disminuir cantidad" onclick="cambiarCantidad('{{ prod['id'] }}', -1)">➖</button>
                             <input class="inv-input" id="cant-{{ prod['id'] }}" type="text" name="{{ prod['id'] }}" value="{{ prod['cantidad_disponible'] }}" readonly>
-                            <button type="button" class="btn-ludico btn-mas" onclick="cambiarCantidad('{{ prod['id'] }}', 1)">➕</button>
+                            <button type="button" class="btn-ludico btn-mas" aria-label="Aumentar cantidad" onclick="cambiarCantidad('{{ prod['id'] }}', 1)">➕</button>
                         </div>
                     </div>
                     {% endif %}
@@ -111,13 +132,13 @@
             <div class="inventario-grid">
                 {% for prod in productos %}
                     {% if prod['tamano'] == 'Pequeño' %}
-                    <div class="inv-card">
-                        <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur" class="img-yogur">
+                    <div class="inv-card" data-stock="{% if prod['cantidad_disponible'] == 0 %}0{% elif prod['cantidad_disponible'] <= 2 %}low{% else %}ok{% endif %}">
+                        <img src="{{ url_for('static', filename=prod['imagen']) }}" alt="Yogur de {{ prod['sabor'] }} pequeño" class="img-yogur">
                         <div class="precio-badge">${{ prod['precio_usd'] | int }}</div>
                         <div class="controles">
-                            <button type="button" class="btn-ludico btn-menos" onclick="cambiarCantidad('{{ prod['id'] }}', -1)">➖</button>
+                            <button type="button" class="btn-ludico btn-menos" aria-label="Disminuir cantidad" onclick="cambiarCantidad('{{ prod['id'] }}', -1)">➖</button>
                             <input class="inv-input" id="cant-{{ prod['id'] }}" type="text" name="{{ prod['id'] }}" value="{{ prod['cantidad_disponible'] }}" readonly>
-                            <button type="button" class="btn-ludico btn-mas" onclick="cambiarCantidad('{{ prod['id'] }}', 1)">➕</button>
+                            <button type="button" class="btn-ludico btn-mas" aria-label="Aumentar cantidad" onclick="cambiarCantidad('{{ prod['id'] }}', 1)">➕</button>
                         </div>
                     </div>
                     {% endif %}
