@@ -27,6 +27,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("RENDER", "").lower() == "true",
     PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=30),
+    MAX_CONTENT_LENGTH=16 * 1024,
 )
 DB_NAME = "yogures_v2.db"
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -45,6 +46,38 @@ def csrf_valido():
     return hmac.compare_digest(
         request.form.get("csrf_token", ""), session.get("csrf_token", "")
     )
+
+
+@app.after_request
+def aplicar_cabeceras_seguridad(respuesta):
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
+    respuesta.headers["X-Frame-Options"] = "DENY"
+    respuesta.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    respuesta.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    respuesta.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+    )
+    if request.is_secure:
+        respuesta.headers["Strict-Transport-Security"] = "max-age=31536000"
+    if request.path.startswith("/abuela") or request.path.startswith("/entregar"):
+        respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@app.errorhandler(413)
+def solicitud_demasiado_grande(error):
+    return jsonify({"error": "La solicitud es demasiado grande."}), 413
+
+
+@app.errorhandler(500)
+def error_interno(error):
+    return jsonify({"error": "No se pudo completar la solicitud."}), 500
+
+
+@app.route('/robots.txt')
+def robots():
+    return "User-agent: *\nDisallow: /abuela\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 def conectar_base_datos():
@@ -197,12 +230,17 @@ def catalogo():
 
 @app.route('/comprar', methods=['POST'])
 def comprar():
-    datos = request.json 
-    cliente = datos.get('cliente', '').strip()
-    telefono = datos.get('telefono', '').strip()
-    ubicacion = datos.get('ubicacion', '').strip()
+    datos = request.get_json(silent=True) or {}
+    cliente = datos.get('cliente', '').strip() if isinstance(datos.get('cliente'), str) else ''
+    telefono = datos.get('telefono', '').strip() if isinstance(datos.get('telefono'), str) else ''
+    ubicacion = datos.get('ubicacion', '').strip() if isinstance(datos.get('ubicacion'), str) else ''
     carrito = datos.get('carrito', [])
-    if not cliente or not telefono or not ubicacion or not carrito:
+    if (
+        not cliente or len(cliente) > 100
+        or not telefono or len(telefono) > 40
+        or not ubicacion or len(ubicacion) > 160
+        or not isinstance(carrito, list) or not carrito or len(carrito) > 20
+    ):
         return jsonify({"error": "Completa tus datos y agrega al menos un yogur."}), 400
     descripcion_pedido = []
     
@@ -210,10 +248,25 @@ def comprar():
     c = conn.cursor()
 
     for item in carrito:
-        id_prod = item['id']
-        cant = item['cantidad']
-        sabor = item['sabor']
-        tamano = item['tamano']
+        if not isinstance(item, dict):
+            conn.close()
+            return jsonify({"error": "El carrito no es válido."}), 400
+        try:
+            id_prod = int(item['id'])
+            cant = int(item['cantidad'])
+        except (KeyError, TypeError, ValueError):
+            conn.close()
+            return jsonify({"error": "El carrito no es válido."}), 400
+        if id_prod <= 0 or cant <= 0 or cant > 100:
+            conn.close()
+            return jsonify({"error": "La cantidad solicitada no es válida."}), 400
+        ejecutar(c, "SELECT sabor, tamano FROM productos WHERE id = ?", (id_prod,))
+        producto = c.fetchone()
+        if not producto:
+            conn.close()
+            return jsonify({"error": "Uno de los productos no existe."}), 400
+        sabor = producto["sabor"] if DATABASE_URL else producto[0]
+        tamano = producto["tamano"] if DATABASE_URL else producto[1]
         ejecutar(c,
             "UPDATE productos SET cantidad_disponible = cantidad_disponible - ? "
             "WHERE id = ? AND cantidad_disponible >= ?",
