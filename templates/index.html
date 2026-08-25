@@ -93,8 +93,8 @@
             margin-top: 4px;
         }
 
-        .sabores-panel { display: none; }
-        .sabores-panel.activo { display: flex; }
+        .sabores-panel { display: none !important; }
+        .sabores-panel.activo { display: flex !important; }
 
         /* DISEÑO DE LA TARJETA ESPACIOSA */
         .producto { 
@@ -435,7 +435,7 @@
             .selector-tamano { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
             .btn-tamano { min-width: 0; padding: 14px 8px; font-size: 14px; }
             .catalogo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; }
-            .catalogo.sabores-panel.activo { display: grid; }
+            .catalogo.sabores-panel.activo { display: grid !important; }
             .producto { width: auto; padding: 10px; border-radius: 6px; }
             .img-contenedor { height: 145px; margin-bottom: 8px; }
             h2 { font-size: 20px; }
