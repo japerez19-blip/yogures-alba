@@ -1,0 +1,107 @@
+name: Build APK - Yogures Alba
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Generate signing keystore
+        run: |
+          keytool -genkeypair \
+            -alias yogures-alba \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore android.keystore \
+            -storepass yogures123456 \
+            -keypass yogures123456 \
+            -dname "CN=Yogures Alba, OU=Dev, O=YoguresAlba, L=Caracas, ST=Miranda, C=VE"
+
+      - name: Initialize and build TWA
+        run: |
+          # Accept Bubblewrap defaults non-interactively
+          echo "" | bubblewrap init --manifest="https://tienda-abuela.onrender.com/static/manifest.json" || true
+
+          # Overwrite signing config
+          if [ -f twa-manifest.json ]; then
+            # Update signing key path in the generated manifest
+            cat twa-manifest.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          data['signingKey'] = {'path': '${{ github.workspace }}/android.keystore', 'alias': 'yogures-alba'}
+          data['enableNotifications'] = True
+          json.dump(data, sys.stdout, indent=2)
+          " > twa-manifest-updated.json
+            mv twa-manifest-updated.json twa-manifest.json
+          fi
+
+          # Build the APK
+          bubblewrap build \
+            --skipPwaValidation \
+            --signingKeyPath "${{ github.workspace }}/android.keystore" \
+            --signingKeyAlias yogures-alba \
+            --signingKeyPassword yogures123456 \
+            --keystorePassword yogures123456 \
+            2>&1 || true
+
+      - name: List build outputs
+        run: |
+          echo "=== All APK files ==="
+          find . -name "*.apk" -type f 2>/dev/null
+          echo "=== All AAB files ==="
+          find . -name "*.aab" -type f 2>/dev/null
+          echo "=== app/build directory ==="
+          find ./app/build -type f 2>/dev/null | head -30 || echo "No app/build dir"
+
+      - name: Collect APK
+        run: |
+          APK=$(find . -name "*.apk" -type f | head -1)
+          if [ -n "$APK" ]; then
+            cp "$APK" yogures-alba.apk
+            echo "APK_READY=true" >> $GITHUB_ENV
+            echo "Found APK: $APK"
+            ls -lh yogures-alba.apk
+          else
+            echo "APK_READY=false" >> $GITHUB_ENV
+            echo "No APK found"
+          fi
+
+      - name: Upload APK artifact
+        if: env.APK_READY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yogures-alba-apk
+          path: yogures-alba.apk
+          retention-days: 90
+
+      - name: Upload full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            twa-manifest.json
+            app/build/outputs/
+          retention-days: 7

@@ -98,6 +98,13 @@ def robots():
     return "User-agent: *\nDisallow: /abuela\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
+@app.route('/.well-known/assetlinks.json')
+def assetlinks():
+    # Retorna la configuración para que Android confíe en la APK de Yogures Alba
+    return send_from_directory('static', 'assetlinks.json', mimetype='application/json')
+
+
+
 def conectar_base_datos():
     if DATABASE_URL:
         if psycopg2 is None:
