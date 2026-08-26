@@ -84,29 +84,29 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Sign APK (if unsigned)
+      - name: Align and Sign APK with apksigner (v2/v3 scheme)
         run: |
           APK_RAW=$(find . -name "*.apk" -type f | head -1)
           echo "Raw APK found at: $APK_RAW"
           
-          # Sign with jarsigner to guarantee it can be installed on Android
-          jarsigner -keystore android.keystore \
-            -storepass yogures123456 \
-            -keypass yogures123456 \
-            "$APK_RAW" yogures-alba || true
+          # 1. Zipalign the APK first
+          /usr/local/lib/android/sdk/build-tools/34.0.0/zipalign -v -p 4 "$APK_RAW" aligned.apk
           
-          # Align / verify
-          cp "$APK_RAW" yogures-alba.apk
+          # 2. Sign with apksigner (enables v2/v3/v4 signatures required by Android 11+)
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign \
+            --ks android.keystore \
+            --ks-key-alias yogures-alba \
+            --ks-pass pass:yogures123456 \
+            --key-pass pass:yogures123456 \
+            --out yogures-alba.apk \
+            aligned.apk
+          
+          # 3. Verify signature
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner verify --verbose yogures-alba.apk
+          
+          echo "APK successfully signed and verified! Size:"
           ls -lh yogures-alba.apk
 
-      - name: Verify APK was created
-        run: |
-          if [ ! -f "yogures-alba.apk" ] || [ ! -s "yogures-alba.apk" ]; then
-            echo "::error::No APK file was generated!"
-            exit 1
-          fi
-          echo "APK successfully created! Size:"
-          ls -lh yogures-alba.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
