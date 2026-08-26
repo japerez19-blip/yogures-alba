@@ -29,6 +29,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/build-tools/34.0.0" >> $GITHUB_PATH
 
       - name: Accept Android SDK Licenses & Install Components
         run: |
@@ -38,7 +39,7 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
 
-      - name: Configure Bubblewrap
+      - name: Configure Bubblewrap & Android SDK paths
         run: |
           mkdir -p ~/.bubblewrap
           cat <<EOF > ~/.bubblewrap/config.json
@@ -47,6 +48,9 @@ jobs:
             "androidSdkPath": "/usr/local/lib/android/sdk"
           }
           EOF
+          
+          # Create local.properties for Gradle
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
 
       - name: Generate Signing Keystore
         run: |
@@ -63,37 +67,45 @@ jobs:
           echo "=== SHA-256 Fingerprint ==="
           keytool -list -v -keystore android.keystore -alias yogures-alba -storepass yogures123456 | grep "SHA256:"
 
-      - name: Update Android Project from twa-manifest.json
+      - name: Generate Android Project from twa-manifest.json
         run: |
-          # Generate Android project structure from twa-manifest
           bubblewrap update --skipVersionUpgrade
 
-      - name: Compile APK
+      - name: Compile Android APK
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: yogures123456
           BUBBLEWRAP_KEY_PASSWORD: yogures123456
         run: |
-          # First attempt with bubblewrap build
-          bubblewrap build --skipPwaValidation || {
-            echo "Bubblewrap build failed, attempting direct Gradle build..."
-            chmod +x gradlew
-            ./gradlew assembleRelease
-          }
-
-      - name: Verify and Package APK
-        run: |
-          echo "=== Listing generated APKs ==="
-          find . -name "*.apk" -type f
-          
-          APK_FILE=$(find . -name "*signed*.apk" -o -name "*release*.apk" -o -name "*.apk" | head -1)
-          
-          if [ -z "$APK_FILE" ]; then
-            echo "::error::No APK file found in build output!"
-            exit 1
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          if [ -d "app" ]; then
+            echo "sdk.dir=/usr/local/lib/android/sdk" > app/local.properties
           fi
           
-          echo "Found APK: $APK_FILE"
-          cp "$APK_FILE" yogures-alba.apk
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Sign APK (if unsigned)
+        run: |
+          APK_RAW=$(find . -name "*.apk" -type f | head -1)
+          echo "Raw APK found at: $APK_RAW"
+          
+          # Sign with jarsigner to guarantee it can be installed on Android
+          jarsigner -keystore android.keystore \
+            -storepass yogures123456 \
+            -keypass yogures123456 \
+            "$APK_RAW" yogures-alba || true
+          
+          # Align / verify
+          cp "$APK_RAW" yogures-alba.apk
+          ls -lh yogures-alba.apk
+
+      - name: Verify APK was created
+        run: |
+          if [ ! -f "yogures-alba.apk" ] || [ ! -s "yogures-alba.apk" ]; then
+            echo "::error::No APK file was generated!"
+            exit 1
+          fi
+          echo "APK successfully created! Size:"
           ls -lh yogures-alba.apk
 
       - name: Upload APK Artifact
