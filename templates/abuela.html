@@ -86,18 +86,10 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit">🔒 CERRAR SESIÓN</button>
     </form>
-    <div id="panel-notif-push" style="margin: 15px auto; max-width: 420px;">
-        <button id="btn-activar-push" type="button" onclick="activarYProbarPush()" style="background: linear-gradient(45deg, #ff1493, #ff69b4); color: white; font-size: 22px; padding: 16px 24px; border: none; border-radius: 25px; cursor: pointer; font-weight: 900; box-shadow: 0 6px 0px #c71585; width: 95%; max-width: 400px; display: block; margin: 10px auto;">
-            🔔 ACTIVAR NOTIFICACIONES AL TELÉFONO
-        </button>
-        <button id="btn-probar-push" type="button" onclick="probarPushDirecto()" style="background-color: #4CAF50; color: white; font-size: 16px; padding: 10px 18px; border: none; border-radius: 15px; cursor: pointer; font-weight: bold; margin: 8px auto 0 auto; display: none;">
-            📲 Enviar Notificación de Prueba
-        </button>
-        <div id="estado-push" style="font-size: 16px; color: #2e7d32; font-weight: bold; margin-top: 8px; display: none;">
-            ✅ Notificaciones 24/7 activas en este teléfono
-        </div>
+    <div id="estado-push" style="font-size: 13px; color: #888; margin: 5px auto; display: none;">
+        ⚡ Conectado a notificaciones en tiempo real
     </div>
-    <button id="btn-instalar-app" type="button" onclick="instalarApp()" style="display: none; background-color: #0d47a1; color: white; font-size: 24px; padding: 16px 24px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; box-shadow: 0 6px 0px #002171; margin: 10px auto 20px auto; width: 95%; max-width: 400px;">📲 INSTALAR APP EN EL TELÉFONO</button>
+
 
     {% if pedidos|length == 0 %}
         <div style="color: #ff69b4; font-size: 28px; font-weight: bold; margin: 30px 0;">¡Todo tranquilo! A descansar ☕</div>
@@ -381,38 +373,23 @@
             return null;
         }
 
-        async function activarYProbarPush() {
-            desbloquearAudioGlobal();
-            if (!('Notification' in window)) {
-                alert('Tu navegador no soporta notificaciones push.');
-                return;
-            }
-            const perm = await Notification.requestPermission();
-            if (perm !== 'granted') {
-                alert('Debes seleccionar "Permitir" en las notificaciones para que el teléfono te avise.');
-                return;
-            }
-            if ('serviceWorker' in navigator) {
+        async function autoRegistrarPush() {
+            if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return;
+            try {
                 const reg = await navigator.serviceWorker.ready;
-                const sub = await suscribirWebPush(reg);
-                if (sub) {
-                    fetch('/abuela/probar_push', { method: 'POST' });
+                registrationSW = reg;
+                
+                // Si aún no se ha pedido permiso, solicitarlo
+                if (Notification.permission === 'default') {
+                    const perm = await Notification.requestPermission();
+                    if (perm === 'granted') {
+                        await suscribirWebPush(reg);
+                    }
+                } else if (Notification.permission === 'granted') {
+                    await suscribirWebPush(reg);
                 }
-            }
-        }
-
-        function probarPushDirecto() {
-            fetch('/abuela/probar_push', { method: 'POST' });
-        }
-
-        function actualizarEstadoPushUI(activo) {
-            let btnActivar = document.getElementById('btn-activar-push');
-            let btnProbar = document.getElementById('btn-probar-push');
-            let txtEstado = document.getElementById('estado-push');
-            if (activo || (window.Notification && Notification.permission === 'granted')) {
-                if (btnActivar) btnActivar.style.display = 'none';
-                if (btnProbar) btnProbar.style.display = 'block';
-                if (txtEstado) txtEstado.style.display = 'block';
+            } catch (e) {
+                console.error('Error auto-registrando push:', e);
             }
         }
 
@@ -420,32 +397,19 @@
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/static/sw.js').then(async reg => {
                     registrationSW = reg;
-                    if ('Notification' in window && Notification.permission === 'granted') {
-                        await suscribirWebPush(reg);
-                    }
-                    actualizarEstadoPushUI(false);
+                    autoRegistrarPush();
                 }).catch(() => {});
             });
+
+            // En el primer toque de pantalla, intentar registrar si hacía falta un gesto del usuario
+            window.addEventListener('click', () => {
+                desbloquearAudioGlobal();
+                if (window.Notification && Notification.permission !== 'granted') {
+                    autoRegistrarPush();
+                }
+            }, { once: false });
         }
 
-        let diferidoPrompt = null;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            diferidoPrompt = e;
-            let btnInstalar = document.getElementById('btn-instalar-app');
-            if (btnInstalar) btnInstalar.style.display = 'block';
-        });
-
-        function instalarApp() {
-            if (diferidoPrompt) {
-                diferidoPrompt.prompt();
-                diferidoPrompt.userChoice.then(() => {
-                    diferidoPrompt = null;
-                    let btnInstalar = document.getElementById('btn-instalar-app');
-                    if (btnInstalar) btnInstalar.style.display = 'none';
-                });
-            }
-        }
     </script>
 </body>
 </html>
