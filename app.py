@@ -27,7 +27,30 @@ except ImportError:
     webpush = None
     WebPushException = Exception
 
+try:
+    import firebase_admin
+    from firebase_admin import credentials, messaging
+    
+    cred = None
+    if os.path.exists("firebase-key.json"):
+        cred = credentials.Certificate("firebase-key.json")
+    elif os.path.exists("firebase-adminsdk.json"):
+        cred = credentials.Certificate("firebase-adminsdk.json")
+    elif os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
+        cred_dict = json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"])
+        cred = credentials.Certificate(cred_dict)
+
+        
+    if cred and not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+        print("[FIREBASE] Admin SDK inicializado exitosamente")
+except Exception as e:
+    firebase_admin = None
+    messaging = None
+    print(f"[FIREBASE] No se pudo inicializar Firebase Admin: {e}")
+
 load_dotenv()
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
@@ -201,6 +224,13 @@ def iniciar_base_datos():
                     auth TEXT NOT NULL,
                     fecha {tipo_fecha}
                 )''')
+    ejecutar(c, f'''CREATE TABLE IF NOT EXISTS dispositivos_fcm (
+                    id {tipo_id},
+                    token TEXT UNIQUE NOT NULL,
+                    dispositivo TEXT DEFAULT 'Android',
+                    fecha {tipo_fecha}
+                )''')
+
     if DATABASE_URL:
         ejecutar(c, "SELECT column_name FROM information_schema.columns WHERE table_name = 'pedidos'")
         columnas_pedidos = {columna["column_name"] for columna in c.fetchall()}
@@ -342,47 +372,79 @@ def comprar():
 
 
 def enviar_web_push_async(titulo, cuerpo):
-    if not webpush:
-        print("[PUSH] pywebpush no disponible")
-        return
     def _enviar():
-        try:
-            conn = conectar_base_datos()
-            c = conn.cursor()
-            ejecutar(c, "SELECT endpoint, p256dh, auth FROM suscripciones_push")
-            suscripciones = c.fetchall()
-            conn.close()
-            print(f"[PUSH] Dispositivos registrados: {len(suscripciones)}")
-            payload = json.dumps({"titulo": titulo, "cuerpo": cuerpo})
-            for s in suscripciones:
-                endpoint = s["endpoint"] if DATABASE_URL else s[0]
-                p256dh = s["p256dh"] if DATABASE_URL else s[1]
-                auth = s["auth"] if DATABASE_URL else s[2]
-                try:
-                    res = webpush(
-                        subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
-                        data=payload,
-                        vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims=VAPID_CLAIMS,
-                        timeout=8
-                    )
-                    print(f"[PUSH] Enviado con éxito a {endpoint[:45]}...")
-                except WebPushException as ex:
-                    print(f"[PUSH] Error WebPush: {ex}")
-                    if hasattr(ex, 'response') and ex.response and ex.response.status_code in [404, 410]:
-                        try:
-                            conn_d = conectar_base_datos()
-                            c_d = conn_d.cursor()
-                            ejecutar(c_d, "DELETE FROM suscripciones_push WHERE endpoint = ?", (endpoint,))
-                            conn_d.commit()
-                            conn_d.close()
-                        except Exception:
-                            pass
-                except Exception as e:
-                    print(f"[PUSH] Error individual: {e}")
-        except Exception as e:
-            print(f"[PUSH] Error en hilo push: {e}")
+        # 1. Enviar notificación Push Nativa con Firebase Cloud Messaging (FCM)
+        if messaging:
+            try:
+                conn_f = conectar_base_datos()
+                c_f = conn_f.cursor()
+                ejecutar(c_f, "SELECT token FROM dispositivos_fcm")
+                filas_tokens = c_f.fetchall()
+                conn_f.close()
+                tokens = [f["token"] if DATABASE_URL else f[0] for f in filas_tokens]
+                print(f"[FCM] Dispositivos nativos registrados: {len(tokens)}")
+                for token in tokens:
+                    try:
+                        mensaje = messaging.Message(
+                            notification=messaging.Notification(
+                                title=titulo,
+                                body=cuerpo,
+                            ),
+                            android=messaging.AndroidConfig(
+                                priority='high',
+                                notification=messaging.AndroidNotification(
+                                    sound='default',
+                                    channel_id='pedidos_abuela',
+                                    priority='high',
+                                    default_vibrate_timings=True
+                                )
+                            ),
+                            token=token
+                        )
+                        messaging.send(mensaje)
+                        print(f"[FCM] Notificación nativa enviada a {token[:25]}...")
+                    except Exception as e_token:
+                        print(f"[FCM] Error enviando a token: {e_token}")
+            except Exception as e_fcm:
+                print(f"[FCM] Error general FCM: {e_fcm}")
+
+        # 2. Enviar WebPush tradicional (Fallback)
+        if webpush:
+            try:
+                conn = conectar_base_datos()
+                c = conn.cursor()
+                ejecutar(c, "SELECT endpoint, p256dh, auth FROM suscripciones_push")
+                suscripciones = c.fetchall()
+                conn.close()
+                payload = json.dumps({"titulo": titulo, "cuerpo": cuerpo})
+                for s in suscripciones:
+                    endpoint = s["endpoint"] if DATABASE_URL else s[0]
+                    p256dh = s["p256dh"] if DATABASE_URL else s[1]
+                    auth = s["auth"] if DATABASE_URL else s[2]
+                    try:
+                        res = webpush(
+                            subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
+                            data=payload,
+                            vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims=VAPID_CLAIMS,
+                            timeout=8
+                        )
+                    except WebPushException as ex:
+                        if hasattr(ex, 'response') and ex.response and ex.response.status_code in [404, 410]:
+                            try:
+                                conn_d = conectar_base_datos()
+                                c_d = conn_d.cursor()
+                                ejecutar(c_d, "DELETE FROM suscripciones_push WHERE endpoint = ?", (endpoint,))
+                                conn_d.commit()
+                                conn_d.close()
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        print(f"[PUSH] Error individual: {e}")
+            except Exception as e:
+                print(f"[PUSH] Error en hilo push: {e}")
     threading.Thread(target=_enviar, daemon=True).start()
+
 
 
 
@@ -530,6 +592,34 @@ def probar_push():
         return jsonify({"error": "No autorizado"}), 401
     enviar_web_push_async("🍓 ¡Prueba de Notificación!", "Las notificaciones en reposo están 100% activadas en este teléfono")
     return jsonify({"mensaje": "Notificación de prueba enviada"})
+
+
+@app.route('/api/registrar_token_fcm', methods=['POST'])
+def registrar_token_fcm():
+    datos = request.get_json(silent=True) or {}
+    token = datos.get('token')
+    if not token:
+        return jsonify({"error": "Token no proporcionado"}), 400
+    fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn = conectar_base_datos()
+    c = conn.cursor()
+    if DATABASE_URL:
+        ejecutar(c, """
+            INSERT INTO dispositivos_fcm (token, dispositivo, fecha)
+            VALUES (?, ?, ?)
+            ON CONFLICT (token) DO UPDATE SET fecha = EXCLUDED.fecha
+        """, (token, "Android", fecha))
+    else:
+        ejecutar(c, """
+            INSERT INTO dispositivos_fcm (token, dispositivo, fecha)
+            VALUES (?, ?, ?)
+            ON CONFLICT (token) DO UPDATE SET fecha = excluded.fecha
+        """, (token, "Android", fecha))
+    conn.commit()
+    conn.close()
+    print(f"[FCM] Token registrado: {token[:25]}...")
+    return jsonify({"mensaje": "Token FCM registrado exitosamente"})
+
 
 
 if __name__ == '__main__':

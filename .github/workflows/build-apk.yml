@@ -1,4 +1,4 @@
-name: Build APK - Yogures Alba
+name: Build APK (Capacitor FCM) - Yogures Alba
 
 on:
   push:
@@ -31,26 +31,17 @@ jobs:
           echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
           echo "/usr/local/lib/android/sdk/build-tools/34.0.0" >> $GITHUB_PATH
 
-      - name: Accept Android SDK Licenses & Install Components
-        run: |
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+      - name: Install npm dependencies
+        run: npm install
 
-      - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
-
-      - name: Configure Bubblewrap & Android SDK paths
+      - name: Initialize Capacitor Android Project
         run: |
-          mkdir -p ~/.bubblewrap
-          cat <<EOF > ~/.bubblewrap/config.json
-          {
-            "jdkPath": "$JAVA_HOME",
-            "androidSdkPath": "/usr/local/lib/android/sdk"
-          }
-          EOF
-          
-          # Create local.properties for Gradle
-          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          npx cap add android
+          if [ -f "google-services.json" ]; then
+            cp google-services.json android/app/google-services.json
+            echo "google-services.json copied to android/app/"
+          fi
+          npx cap sync android
 
       - name: Generate Signing Keystore
         run: |
@@ -63,36 +54,26 @@ jobs:
             -storepass yogures123456 \
             -keypass yogures123456 \
             -dname "CN=Yogures Alba, OU=Dev, O=YoguresAlba, L=Caracas, ST=Miranda, C=VE"
-          
-          echo "=== SHA-256 Fingerprint ==="
-          keytool -list -v -keystore android.keystore -alias yogures-alba -storepass yogures123456 | grep "SHA256:"
 
-      - name: Generate Android Project from twa-manifest.json
+      - name: Build Android Release APK with Gradle
         run: |
-          bubblewrap update --skipVersionUpgrade
-
-      - name: Compile Android APK
-        env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: yogures123456
-          BUBBLEWRAP_KEY_PASSWORD: yogures123456
-        run: |
+          cd android
           echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
-          if [ -d "app" ]; then
-            echo "sdk.dir=/usr/local/lib/android/sdk" > app/local.properties
-          fi
-          
           chmod +x gradlew
           ./gradlew assembleRelease
 
       - name: Align and Sign APK with apksigner (v2/v3 scheme)
         run: |
-          APK_RAW=$(find . -name "*.apk" -type f | head -1)
+          APK_RAW=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK_RAW" ]; then
+            APK_RAW=$(find . -name "*.apk" -type f | head -1)
+          fi
           echo "Raw APK found at: $APK_RAW"
           
-          # 1. Zipalign the APK first
+          # 1. Zipalign the APK
           /usr/local/lib/android/sdk/build-tools/34.0.0/zipalign -v -p 4 "$APK_RAW" aligned.apk
           
-          # 2. Sign with apksigner (enables v2/v3/v4 signatures required by Android 11+)
+          # 2. Sign with apksigner
           /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign \
             --ks android.keystore \
             --ks-key-alias yogures-alba \
@@ -107,20 +88,9 @@ jobs:
           echo "APK successfully signed and verified! Size:"
           ls -lh yogures-alba.apk
 
-
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: yogures-alba-apk
           path: yogures-alba.apk
           retention-days: 90
-
-      - name: Upload Build Artifacts (Logs & Project)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            twa-manifest.json
-            android.keystore
-          retention-days: 7

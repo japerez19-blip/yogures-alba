@@ -1,0 +1,15 @@
+{
+  "appId": "com.yoguresalba.app",
+  "appName": "Yogures Alba",
+  "webDir": "www",
+  "server": {
+    "url": "https://tienda-abuela.onrender.com/abuela",
+    "cleartext": true
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
+

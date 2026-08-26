@@ -412,8 +412,37 @@
             }
         }
 
+        // 📱 Integración Nativa con Capacitor Push Notifications (FCM)
+        async function inicializarCapacitorPush() {
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications) {
+                const { PushNotifications } = window.Capacitor.Plugins;
+                try {
+                    let perm = await PushNotifications.requestPermissions();
+                    if (perm.receive === 'granted') {
+                        await PushNotifications.register();
+                    }
+                    PushNotifications.addListener('registration', token => {
+                        fetch('/api/registrar_token_fcm', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: token.value })
+                        });
+                        const banner = document.getElementById('banner-permiso-notif');
+                        if (banner) banner.style.display = 'none';
+                    });
+                    PushNotifications.addListener('pushNotificationReceived', notif => {
+                        reproducirCampana();
+                        verificarPedidosNuevos();
+                    });
+                } catch(e) {
+                    console.error('Error inicializando Capacitor FCM:', e);
+                }
+            }
+        }
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
+                inicializarCapacitorPush();
                 navigator.serviceWorker.register('/static/sw.js').then(async reg => {
                     registrationSW = reg;
                     actualizarEstadoUI();
@@ -423,6 +452,7 @@
                 }).catch(() => {});
             });
         }
+
 
 
     </script>
