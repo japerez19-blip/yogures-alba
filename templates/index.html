@@ -533,6 +533,23 @@
             <button class="btn-comprar" type="button" onclick="enviarPedido()">Finalizar Pedido</button>
             <button class="btn-volver" type="button" onclick="volverAlCarrito()">← Revisar carrito</button>
         </div>
+        <!-- Pantalla de confirmación para Escritorio / PC -->
+        <div id="pedido-exito" style="display: none; padding: 15px 10px; text-align: center;">
+            <div style="font-size: 50px; margin-bottom: 5px;">🥣✨</div>
+            <h3 style="color: #d63384; margin: 0 0 10px 0; font-size: 24px;">¡Pedido Recibido con Éxito!</h3>
+            <p style="color: #444; font-size: 16px; margin: 0 auto 15px auto; max-width: 500px; line-height: 1.4;">
+                Tu pedido ya quedó registrado y la <b>Abuela Alba</b> lo está escuchando en su cocina para prepararlo con amor.
+            </p>
+            <div id="exito-resumen" style="background: #fdf0f5; padding: 14px 18px; border-radius: 15px; border: 1px dashed #ffb6c1; margin: 0 auto 20px auto; max-width: 480px; font-size: 15px; color: #333; line-height: 1.5; text-align: left;"></div>
+            <div style="display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center;">
+                <a id="btn-wa-opcional" href="#" target="_blank" rel="noopener" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #25d366; color: white; text-decoration: none; padding: 14px 28px; border-radius: 25px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(37,211,102,0.35); transition: transform 0.2s;">
+                    📲 Abrir en WhatsApp (Opcional)
+                </a>
+                <button type="button" onclick="reiniciarTienda()" style="background: #888; font-size: 14px; padding: 10px 22px; border-radius: 20px; color: white; border: none; cursor: pointer; font-weight: bold;">
+                    ✨ Hacer otro pedido
+                </button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -540,6 +557,10 @@
         let total = 0;
         const tasaBcv = {{ tasa_bcv|tojson }};
         const TELEFONO_WHATSAPP = '584129083408';
+
+        function esDispositivoMovil() {
+            return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 650;
+        }
 
         function mostrarTamano(tamano, boton) {
             document.querySelectorAll('.sabores-panel').forEach(panel => {
@@ -604,6 +625,10 @@
             document.getElementById('resumen-carrito').style.display = 'block';
         }
 
+        function reiniciarTienda() {
+            window.location.reload();
+        }
+
         function enviarPedido() {
             let cliente = document.getElementById('input-cliente').value.trim();
             let telefono = document.getElementById('input-telefono').value.trim();
@@ -626,21 +651,44 @@
                     alert(data.error || "No se pudo enviar el pedido.");
                     return;
                 }
+
                 let detalles = Object.values(carrito).map(item =>
                     item.cantidad + 'x ' + item.sabor + ' (' + item.tamano + ')'
                 ).join(' + ');
                 let totalPedido = Object.values(carrito).reduce(
                     (sum, item) => sum + item.precio * item.cantidad, 0
                 ).toFixed(2);
+                let totalBsTexto = tasaBcv ? ' (Bs ' + (totalPedido * tasaBcv).toFixed(2) + ')' : '';
+
                 let mensaje = '¡Hola! Soy ' + cliente + '.\n\n'
-                    + 'Acabo de pedir:\n' + detalles + '\n\n'
-                    + 'Total: $' + totalPedido + '\n'
+                    + 'Acabo de pedir en la tienda web:\n' + detalles + '\n\n'
+                    + 'Total: $' + totalPedido + totalBsTexto + '\n'
                     + 'Ubicación: ' + ubicacion + '\n'
                     + 'Teléfono: ' + telefono;
                 let urlWA = 'https://wa.me/' + TELEFONO_WHATSAPP
                     + '?text=' + encodeURIComponent(mensaje);
-                alert(data.mensaje + '\n\nTe llevaremos a WhatsApp para confirmar 📲');
-                window.location.href = urlWA;
+
+                if (esDispositivoMovil()) {
+                    alert('¡Pedido registrado! Te abriremos WhatsApp para confirmar con la tienda 📲');
+                    window.location.href = urlWA;
+                } else {
+                    // En PC / Laptop: Mostramos pantalla limpia de éxito sin forzar WhatsApp Web
+                    document.getElementById('resumen-carrito').style.display = 'none';
+                    document.getElementById('datos-cliente').style.display = 'none';
+                    let h3 = document.querySelector('#carrito-panel h3');
+                    if (h3) h3.style.display = 'none';
+                    let lista = document.getElementById('lista-carrito');
+                    if (lista) lista.style.display = 'none';
+
+                    let resumenHTML = '<b>Cliente:</b> ' + cliente + '<br>'
+                        + '<b>Pedido:</b> ' + detalles + '<br>'
+                        + '<b>Total:</b> $' + totalPedido + totalBsTexto + '<br>'
+                        + '<b>Ubicación:</b> ' + ubicacion;
+                    document.getElementById('exito-resumen').innerHTML = resumenHTML;
+                    document.getElementById('btn-wa-opcional').href = urlWA;
+                    document.getElementById('pedido-exito').style.display = 'block';
+                    document.getElementById('carrito-panel').scrollIntoView({ behavior: 'smooth' });
+                }
             });
         }
     </script>
