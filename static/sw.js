@@ -1,5 +1,5 @@
-// Service Worker para Yogures Alba PWA
-const CACHE_NAME = 'yogures-alba-v3';
+// Service Worker para Yogures Alba PWA con Web Push
+const CACHE_NAME = 'yogures-alba-v4';
 const ASSETS = [
   '/static/manifest.json',
   '/static/icon-192.png',
@@ -29,7 +29,33 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Notificaciones del sistema (estilo WhatsApp / Red Social)
+// 🔔 RECIBIR PUSH REMOTO DEL SERVIDOR (WAKE UP CUANDO EL TF ESTÁ BLOQUEADO/REPOSO)
+self.addEventListener('push', event => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { titulo: '🔔 ¡NUEVO PEDIDO DE YOGUR!', cuerpo: event.data ? event.data.text() : 'Tienes un nuevo pedido pendiente' };
+  }
+
+  const titulo = data.titulo || '🔔 ¡NUEVO PEDIDO DE YOGUR!';
+  const opciones = {
+    body: data.cuerpo || 'Tienes un nuevo pedido de la abuela',
+    icon: '/static/icon-192.png',
+    badge: '/static/icon-192.png',
+    vibrate: [500, 200, 500, 200, 700],
+    requireInteraction: true,
+    tag: 'pedido-' + Date.now(),
+    renotify: true,
+    data: { url: '/abuela' }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(titulo, opciones)
+  );
+});
+
+// Mensajes locales desde la ventana activa
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'NOTIFICACION') {
     self.registration.showNotification(event.data.titulo, {
@@ -45,6 +71,7 @@ self.addEventListener('message', event => {
   }
 });
 
+// Al tocar la notificación, abrir y enfocar el panel de la abuela
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(

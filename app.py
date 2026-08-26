@@ -2,11 +2,13 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, s
 import datetime
 import html
 import hmac
+import json
 import os
 import sqlite3
 import re
 import secrets
 import ssl
+import threading
 import time
 import unicodedata
 from urllib.request import Request, urlopen
@@ -18,6 +20,12 @@ try:
 except ImportError:
     psycopg2 = None
     RealDictCursor = None
+
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:
+    webpush = None
+    WebPushException = Exception
 
 load_dotenv()
 
@@ -34,6 +42,15 @@ DB_NAME = "yogures_v2.db"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 BCV_URL = "https://www.bcv.org.ve/"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+VAPID_PUBLIC_KEY = os.environ.get(
+    "VAPID_PUBLIC_KEY",
+    "BLNxVALvOSc7f-qJWHsOR_Rlp-CBxi0w_lPtlXbOdhLwrcSoIZrjrX_t1OdlUejgEyDj3EkZPWBf1y2OCeWiNDM"
+)
+VAPID_PRIVATE_KEY = os.environ.get(
+    "VAPID_PRIVATE_KEY",
+    "WmsaUOp0u4w_UPucZ5vj30S7knbTJbaGYw4P6NPPFtE"
+)
+VAPID_CLAIMS = {"sub": "mailto:japerez.19@est.ucab.edu.ve"}
 intentos_login = {}
 
 
@@ -170,6 +187,13 @@ def iniciar_base_datos():
                     estado TEXT DEFAULT 'PENDIENTE', 
                     fecha {tipo_fecha}
                 )''')
+    ejecutar(c, f'''CREATE TABLE IF NOT EXISTS suscripciones_push (
+                    id {tipo_id},
+                    endpoint TEXT UNIQUE NOT NULL,
+                    p256dh TEXT NOT NULL,
+                    auth TEXT NOT NULL,
+                    fecha {tipo_fecha}
+                )''')
     if DATABASE_URL:
         ejecutar(c, "SELECT column_name FROM information_schema.columns WHERE table_name = 'pedidos'")
         columnas_pedidos = {columna["column_name"] for columna in c.fetchall()}
@@ -303,7 +327,52 @@ def comprar():
     )
     conn.commit()
     conn.close()
+    
+    # Enviar notificación Push inmediata al teléfono/tablet de la abuela
+    enviar_web_push_async("🔔 ¡NUEVO PEDIDO DE YOGUR!", f"{cliente}: {descripcion_final}")
+    
     return jsonify({"mensaje": "¡Pedido enviado a la abuela!"})
+
+
+def enviar_web_push_async(titulo, cuerpo):
+    if not webpush:
+        return
+    def _enviar():
+        try:
+            conn = conectar_base_datos()
+            c = conn.cursor()
+            ejecutar(c, "SELECT endpoint, p256dh, auth FROM suscripciones_push")
+            suscripciones = c.fetchall()
+            conn.close()
+            payload = json.dumps({"titulo": titulo, "cuerpo": cuerpo})
+            for s in suscripciones:
+                endpoint = s["endpoint"] if DATABASE_URL else s[0]
+                p256dh = s["p256dh"] if DATABASE_URL else s[1]
+                auth = s["auth"] if DATABASE_URL else s[2]
+                try:
+                    webpush(
+                        subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
+                        data=payload,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims=VAPID_CLAIMS,
+                        timeout=8
+                    )
+                except WebPushException as ex:
+                    if hasattr(ex, 'response') and ex.response and ex.response.status_code in [404, 410]:
+                        try:
+                            conn_d = conectar_base_datos()
+                            c_d = conn_d.cursor()
+                            ejecutar(c_d, "DELETE FROM suscripciones_push WHERE endpoint = ?", (endpoint,))
+                            conn_d.commit()
+                            conn_d.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    threading.Thread(target=_enviar, daemon=True).start()
+
 
 @app.route('/abuela')
 def panel_abuela():
@@ -316,7 +385,13 @@ def panel_abuela():
     ejecutar(c, "SELECT * FROM productos")
     productos = c.fetchall()
     conn.close()
-    return render_template('abuela.html', pedidos=pedidos, productos=productos, csrf_token=token_csrf())
+    return render_template(
+        'abuela.html',
+        pedidos=pedidos,
+        productos=productos,
+        csrf_token=token_csrf(),
+        vapid_public_key=VAPID_PUBLIC_KEY
+    )
 
 @app.route('/abuela/login', methods=['GET', 'POST'])
 def login_abuela():
@@ -406,6 +481,35 @@ def pedidos_pendientes():
             agotados.append(f"{f[1]} ({f[2]})")
     conn.close()
     return jsonify({"pedidos": pedidos, "agotados": agotados})
+
+
+@app.route('/abuela/guardar_suscripcion', methods=['POST'])
+def guardar_suscripcion():
+    datos = request.get_json(silent=True) or {}
+    endpoint = datos.get('endpoint')
+    keys = datos.get('keys') or {}
+    p256dh = keys.get('p256dh')
+    auth = keys.get('auth')
+    if not endpoint or not p256dh or not auth:
+        return jsonify({"error": "Datos incompletos"}), 400
+    fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    conn = conectar_base_datos()
+    c = conn.cursor()
+    if DATABASE_URL:
+        ejecutar(c, """
+            INSERT INTO suscripciones_push (endpoint, p256dh, auth, fecha)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, fecha = EXCLUDED.fecha
+        """, (endpoint, p256dh, auth, fecha))
+    else:
+        ejecutar(c, """
+            INSERT INTO suscripciones_push (endpoint, p256dh, auth, fecha)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, fecha = excluded.fecha
+        """, (endpoint, p256dh, auth, fecha))
+    conn.commit()
+    conn.close()
+    return jsonify({"mensaje": "Suscripción registrada exitosamente"})
 
 
 if __name__ == '__main__':

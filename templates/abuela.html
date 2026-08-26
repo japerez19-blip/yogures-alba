@@ -329,10 +329,46 @@
         setInterval(verificarPedidosNuevos, 10000);
         setTimeout(verificarPedidosNuevos, 1500);
 
-        /* ── Registro de App Móvil (PWA) ── */
+        /* ── Registro de App Móvil (PWA) y Web Push 24/7 ── */
+        const vapidPublicKey = {{ vapid_public_key|tojson }};
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function suscribirWebPush(reg) {
+            if (!('PushManager' in window) || !vapidPublicKey) return;
+            try {
+                let sub = await reg.pushManager.getSubscription();
+                if (!sub) {
+                    const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+                    sub = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: convertedVapidKey
+                    });
+                }
+                if (sub) {
+                    fetch('/abuela/guardar_suscripcion', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(sub)
+                    }).catch(() => {});
+                }
+            } catch(e) {}
+        }
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+                navigator.serviceWorker.register('/static/sw.js').then(reg => {
+                    suscribirWebPush(reg);
+                }).catch(() => {});
             });
         }
 
