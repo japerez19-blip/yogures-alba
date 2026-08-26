@@ -343,6 +343,7 @@ def comprar():
 
 def enviar_web_push_async(titulo, cuerpo):
     if not webpush:
+        print("[PUSH] pywebpush no disponible")
         return
     def _enviar():
         try:
@@ -351,20 +352,23 @@ def enviar_web_push_async(titulo, cuerpo):
             ejecutar(c, "SELECT endpoint, p256dh, auth FROM suscripciones_push")
             suscripciones = c.fetchall()
             conn.close()
+            print(f"[PUSH] Dispositivos registrados: {len(suscripciones)}")
             payload = json.dumps({"titulo": titulo, "cuerpo": cuerpo})
             for s in suscripciones:
                 endpoint = s["endpoint"] if DATABASE_URL else s[0]
                 p256dh = s["p256dh"] if DATABASE_URL else s[1]
                 auth = s["auth"] if DATABASE_URL else s[2]
                 try:
-                    webpush(
+                    res = webpush(
                         subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
                         data=payload,
                         vapid_private_key=VAPID_PRIVATE_KEY,
                         vapid_claims=VAPID_CLAIMS,
                         timeout=8
                     )
+                    print(f"[PUSH] Enviado con éxito a {endpoint[:45]}...")
                 except WebPushException as ex:
+                    print(f"[PUSH] Error WebPush: {ex}")
                     if hasattr(ex, 'response') and ex.response and ex.response.status_code in [404, 410]:
                         try:
                             conn_d = conectar_base_datos()
@@ -374,11 +378,12 @@ def enviar_web_push_async(titulo, cuerpo):
                             conn_d.close()
                         except Exception:
                             pass
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    print(f"[PUSH] Error individual: {e}")
+        except Exception as e:
+            print(f"[PUSH] Error en hilo push: {e}")
     threading.Thread(target=_enviar, daemon=True).start()
+
 
 
 @app.route('/abuela')

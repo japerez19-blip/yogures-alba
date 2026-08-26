@@ -86,9 +86,13 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit">🔒 CERRAR SESIÓN</button>
     </form>
-    <div id="estado-push" style="font-size: 13px; color: #888; margin: 5px auto; display: none;">
-        ⚡ Conectado a notificaciones en tiempo real
+    <div id="banner-permiso-notif" onclick="solicitarPermisoNotificaciones()" style="display: none; background: #ff1493; color: white; padding: 14px 18px; border-radius: 14px; font-size: 16px; font-weight: bold; margin: 12px auto; max-width: 420px; cursor: pointer; box-shadow: 0 4px 14px rgba(255,20,147,0.4); text-align: center;">
+        🔔 Toca aquí 1 sola vez para activar alertas cuando el teléfono esté bloqueado
     </div>
+    <div id="estado-push-ok" style="font-size: 14px; color: #2e7d32; font-weight: bold; margin: 6px auto; display: none;">
+        ✅ Alertas en reposo activadas en este teléfono
+    </div>
+
 
 
     {% if pedidos|length == 0 %}
@@ -364,7 +368,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(sub)
                     });
-                    actualizarEstadoPushUI(true);
+                    actualizarEstadoUI();
                     return sub;
                 }
             } catch(e) {
@@ -373,23 +377,38 @@
             return null;
         }
 
-        async function autoRegistrarPush() {
-            if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return;
+        function actualizarEstadoUI() {
+            const banner = document.getElementById('banner-permiso-notif');
+            const estado = document.getElementById('estado-push-ok');
+            if (window.Notification && Notification.permission === 'granted') {
+                if (banner) banner.style.display = 'none';
+                if (estado) estado.style.display = 'block';
+            } else {
+                if (banner) banner.style.display = 'block';
+                if (estado) estado.style.display = 'none';
+            }
+        }
+
+        async function solicitarPermisoNotificaciones() {
+            desbloquearAudioGlobal();
+            if (!('Notification' in window)) {
+                alert('Este dispositivo no soporta notificaciones push');
+                return;
+            }
             try {
-                const reg = await navigator.serviceWorker.ready;
-                registrationSW = reg;
-                
-                // Si aún no se ha pedido permiso, solicitarlo
-                if (Notification.permission === 'default') {
-                    const perm = await Notification.requestPermission();
-                    if (perm === 'granted') {
-                        await suscribirWebPush(reg);
+                const perm = await Notification.requestPermission();
+                if (perm === 'granted') {
+                    if ('serviceWorker' in navigator) {
+                        const reg = await navigator.serviceWorker.ready;
+                        const sub = await suscribirWebPush(reg);
+                        if (sub) {
+                            fetch('/abuela/probar_push', { method: 'POST' });
+                        }
                     }
-                } else if (Notification.permission === 'granted') {
-                    await suscribirWebPush(reg);
                 }
+                actualizarEstadoUI();
             } catch (e) {
-                console.error('Error auto-registrando push:', e);
+                console.error('Error solicitando permiso:', e);
             }
         }
 
@@ -397,18 +416,14 @@
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/static/sw.js').then(async reg => {
                     registrationSW = reg;
-                    autoRegistrarPush();
+                    actualizarEstadoUI();
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        await suscribirWebPush(reg);
+                    }
                 }).catch(() => {});
             });
-
-            // En el primer toque de pantalla, intentar registrar si hacía falta un gesto del usuario
-            window.addEventListener('click', () => {
-                desbloquearAudioGlobal();
-                if (window.Notification && Notification.permission !== 'granted') {
-                    autoRegistrarPush();
-                }
-            }, { once: false });
         }
+
 
     </script>
 </body>
