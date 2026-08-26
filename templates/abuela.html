@@ -79,6 +79,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit">🔒 CERRAR SESIÓN</button>
     </form>
+    <button id="btn-sonido" type="button" onclick="activarNotificaciones()" style="background-color: #ff69b4; color: white; font-size: 28px; padding: 18px 30px; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; box-shadow: 0 6px 0px #c71585; margin: 15px auto; display: block; width: 95%; max-width: 400px;">🔔 ACTIVAR SONIDO</button>
 
     {% if pedidos|length == 0 %}
         <div style="color: #ff69b4; font-size: 28px; font-weight: bold; margin: 30px 0;">¡Todo tranquilo! A descansar ☕</div>
@@ -149,13 +150,13 @@
         </form>
     </div>
 
-    <!-- Scripts para que funcionen los botones y la voz -->
+    <!-- Scripts para que funcionen los botones, la voz y las notificaciones -->
     <script>
+        /* ── Funciones originales ── */
         function cambiarCantidad(id, cambio) {
             let input = document.getElementById('cant-' + id);
             let valorActual = parseInt(input.value);
             let nuevoValor = valorActual + cambio;
-            
             if (nuevoValor >= 0) {
                 input.value = nuevoValor;
             }
@@ -170,6 +171,83 @@
             mensaje.lang = 'es-ES';
             mensaje.rate = 0.9;
             window.speechSynthesis.speak(mensaje);
+        }
+
+        /* ── Sistema de Notificaciones Automáticas ── */
+        let pedidosConocidos = new Set();
+        let contextoAudio = null;
+
+        // Registrar los pedidos que ya están en pantalla al cargar
+        document.querySelectorAll('form[action^="/entregar/"]').forEach(form => {
+            let id = parseInt(form.action.split('/entregar/').pop());
+            if (!isNaN(id)) pedidosConocidos.add(id);
+        });
+
+        function activarNotificaciones() {
+            contextoAudio = new (window.AudioContext || window.webkitAudioContext)();
+            // Desbloquear audio con un sonido silencioso
+            let buffer = contextoAudio.createBuffer(1, 1, 22050);
+            let source = contextoAudio.createBufferSource();
+            source.buffer = buffer;
+            source.connect(contextoAudio.destination);
+            source.start(0);
+
+            let btn = document.getElementById('btn-sonido');
+            btn.innerHTML = '🔔 SONIDO ACTIVADO ✅';
+            btn.style.backgroundColor = '#32cd32';
+            btn.style.boxShadow = '0 6px 0px #228b22';
+            btn.onclick = null;
+
+            // Iniciar verificación cada 20 segundos
+            setInterval(verificarPedidosNuevos, 20000);
+        }
+
+        function reproducirChime() {
+            if (!contextoAudio) return;
+            const notas = [523.25, 659.25, 783.99, 1046.50]; // Do-Mi-Sol-Do (acorde alegre)
+            notas.forEach((freq, i) => {
+                const osc = contextoAudio.createOscillator();
+                const gain = contextoAudio.createGain();
+                osc.connect(gain);
+                gain.connect(contextoAudio.destination);
+                osc.frequency.value = freq;
+                osc.type = 'sine';
+                const t = contextoAudio.currentTime + i * 0.15;
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                osc.start(t);
+                osc.stop(t + 0.4);
+            });
+        }
+
+        function verificarPedidosNuevos() {
+            fetch('/abuela/pedidos_pendientes')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.pedidos) return;
+                    let nuevos = data.pedidos.filter(p => !pedidosConocidos.has(p.id));
+                    if (nuevos.length > 0) {
+                        // 1. Sonar el chime alegre
+                        reproducirChime();
+                        // 2. Después del chime, leer el pedido en voz alta
+                        setTimeout(() => {
+                            let textoCompleto = nuevos.map(p =>
+                                'Nuevo pedido de ' + p.cliente + '. Quieren ' + p.descripcion
+                            ).join('. ');
+                            let msg = new SpeechSynthesisUtterance('¡Atención! ' + textoCompleto);
+                            msg.lang = 'es-ES';
+                            msg.rate = 0.9;
+                            // 3. Recargar la página cuando termine de hablar
+                            msg.onend = () => window.location.reload();
+                            window.speechSynthesis.speak(msg);
+                            // Respaldo: recargar después de 15 seg si la voz no terminó
+                            setTimeout(() => window.location.reload(), 15000);
+                        }, 800);
+                    }
+                    // Actualizar pedidos conocidos
+                    data.pedidos.forEach(p => pedidosConocidos.add(p.id));
+                })
+                .catch(() => {}); // Ignorar errores de red silenciosamente
         }
     </script>
 </body>

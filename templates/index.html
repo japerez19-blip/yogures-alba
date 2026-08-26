@@ -539,6 +539,7 @@
         let carrito = {}; 
         let total = 0;
         const tasaBcv = {{ tasa_bcv|tojson }};
+        const TELEFONO_WHATSAPP = '584129083408';
 
         function mostrarTamano(tamano, boton) {
             document.querySelectorAll('.sabores-panel').forEach(panel => {
@@ -625,8 +626,21 @@
                     alert(data.error || "No se pudo enviar el pedido.");
                     return;
                 }
-                alert(data.mensaje); 
-                window.location.reload(); 
+                let detalles = Object.values(carrito).map(item =>
+                    item.cantidad + 'x ' + item.sabor + ' (' + item.tamano + ')'
+                ).join(' + ');
+                let totalPedido = Object.values(carrito).reduce(
+                    (sum, item) => sum + item.precio * item.cantidad, 0
+                ).toFixed(2);
+                let mensaje = '¡Hola! Soy ' + cliente + '.\n\n'
+                    + 'Acabo de pedir:\n' + detalles + '\n\n'
+                    + 'Total: $' + totalPedido + '\n'
+                    + 'Ubicación: ' + ubicacion + '\n'
+                    + 'Teléfono: ' + telefono;
+                let urlWA = 'https://wa.me/' + TELEFONO_WHATSAPP
+                    + '?text=' + encodeURIComponent(mensaje);
+                alert(data.mensaje + '\n\nTe llevaremos a WhatsApp para confirmar 📲');
+                window.location.href = urlWA;
             });
         }
     </script>

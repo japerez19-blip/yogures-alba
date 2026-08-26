@@ -381,6 +381,25 @@ def actualizar_inventario():
     conn.close()
     return redirect(url_for('panel_abuela'))
 
+
+@app.route('/abuela/pedidos_pendientes')
+def pedidos_pendientes():
+    if not session.get("abuela_autenticada"):
+        return jsonify({"error": "No autorizado"}), 401
+    conn = conectar_base_datos()
+    c = conn.cursor()
+    ejecutar(c, "SELECT id, cliente, descripcion FROM pedidos WHERE estado = 'PENDIENTE'")
+    filas = c.fetchall()
+    conn.close()
+    pedidos = []
+    for fila in filas:
+        if DATABASE_URL:
+            pedidos.append({"id": fila["id"], "cliente": fila["cliente"], "descripcion": fila["descripcion"]})
+        else:
+            pedidos.append({"id": fila[0], "cliente": fila[1], "descripcion": fila[2]})
+    return jsonify({"pedidos": pedidos})
+
+
 if __name__ == '__main__':
     iniciar_base_datos()
     app.run(debug=True, host='0.0.0.0', port=5000)
