@@ -390,14 +390,22 @@ def pedidos_pendientes():
     c = conn.cursor()
     ejecutar(c, "SELECT id, cliente, descripcion FROM pedidos WHERE estado = 'PENDIENTE'")
     filas = c.fetchall()
-    conn.close()
     pedidos = []
     for fila in filas:
         if DATABASE_URL:
             pedidos.append({"id": fila["id"], "cliente": fila["cliente"], "descripcion": fila["descripcion"]})
         else:
             pedidos.append({"id": fila[0], "cliente": fila[1], "descripcion": fila[2]})
-    return jsonify({"pedidos": pedidos})
+    ejecutar(c, "SELECT id, sabor, tamano, cantidad_disponible FROM productos WHERE cantidad_disponible = 0")
+    filas_agotados = c.fetchall()
+    agotados = []
+    for f in filas_agotados:
+        if DATABASE_URL:
+            agotados.append(f"{f['sabor']} ({f['tamano']})")
+        else:
+            agotados.append(f"{f[1]} ({f[2]})")
+    conn.close()
+    return jsonify({"pedidos": pedidos, "agotados": agotados})
 
 
 if __name__ == '__main__':

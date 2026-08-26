@@ -157,6 +157,8 @@
         </form>
     </div>
 
+    <audio id="audio-campana" src="{{ url_for('static', filename='campana.wav') }}" preload="auto"></audio>
+
     <!-- Scripts para que funcionen los botones, la voz y las notificaciones -->
     <script>
         /* ── Funciones originales ── */
@@ -182,7 +184,9 @@
 
         /* ── Sistema de Notificaciones Automáticas 24/7 ── */
         let pedidosConocidos = new Set();
+        let agotadosConocidos = new Set();
         let contextoAudio = null;
+        let audioDesbloqueado = false;
 
         // Registrar los pedidos que ya están en pantalla al cargar
         document.querySelectorAll('form[action^="/entregar/"]').forEach(form => {
@@ -190,7 +194,15 @@
             if (!isNaN(id)) pedidosConocidos.add(id);
         });
 
-        function obtenerContextoAudio() {
+        function desbloquearAudioGlobal() {
+            let audio = document.getElementById('audio-campana');
+            if (audio && !audioDesbloqueado) {
+                audio.play().then(() => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audioDesbloqueado = true;
+                }).catch(() => {});
+            }
             if (!contextoAudio) {
                 try {
                     contextoAudio = new (window.AudioContext || window.webkitAudioContext)();
@@ -199,71 +211,103 @@
             if (contextoAudio && contextoAudio.state === 'suspended') {
                 contextoAudio.resume();
             }
-            return contextoAudio;
         }
 
-        // Desbloquear audio silenciosamente al primer toque en la pantalla
-        ['click', 'touchstart', 'scroll'].forEach(evt => {
-            window.addEventListener(evt, () => {
-                obtenerContextoAudio();
-            }, { passive: true });
+        // Desbloquear audio automáticamente al interactuar con cualquier parte de la pantalla
+        ['touchstart', 'touchend', 'click', 'pointerdown', 'keydown', 'scroll'].forEach(evt => {
+            document.addEventListener(evt, desbloquearAudioGlobal, { passive: true });
         });
 
-        // Solicitar permisos de notificación del sistema en segundo plano
+        // Solicitar permisos de notificación en primer plano
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
         }
 
-        function reproducirChime() {
-            let ctx = obtenerContextoAudio();
-            if (!ctx) return;
-            const notas = [523.25, 659.25, 783.99, 1046.50]; // Do-Mi-Sol-Do (acorde alegre)
+        function reproducirSonidoCampana() {
+            let audio = document.getElementById('audio-campana');
+            if (audio) {
+                audio.currentTime = 0;
+                audio.play().catch(() => {
+                    reproducirChimeFallback();
+                });
+            } else {
+                reproducirChimeFallback();
+            }
+        }
+
+        function reproducirChimeFallback() {
+            if (!contextoAudio) {
+                try { contextoAudio = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+            }
+            if (!contextoAudio) return;
+            const notas = [783.99, 1046.50, 1318.51];
             notas.forEach((freq, i) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
+                const osc = contextoAudio.createOscillator();
+                const gain = contextoAudio.createGain();
                 osc.connect(gain);
-                gain.connect(ctx.destination);
+                gain.connect(contextoAudio.destination);
                 osc.frequency.value = freq;
-                osc.type = 'sine';
-                const t = ctx.currentTime + i * 0.15;
-                gain.gain.setValueAtTime(0.5, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                osc.type = 'triangle';
+                const t = contextoAudio.currentTime + i * 0.14;
+                gain.gain.setValueAtTime(0.6, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.45);
                 osc.start(t);
-                osc.stop(t + 0.4);
+                osc.stop(t + 0.45);
             });
+        }
+
+        function emitirAlertaSistema(titulo, cuerpo, tag) {
+            // 1. Vibración del teléfono estilo WhatsApp (2 pulsos fuertes)
+            if (navigator.vibrate) {
+                navigator.vibrate([400, 150, 400, 150, 600]);
+            }
+
+            // 2. Sonar campana fuerte
+            reproducirSonidoCampana();
+
+            // 3. Notificación Push en la barra del teléfono
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'NOTIFICACION',
+                    titulo: titulo,
+                    cuerpo: cuerpo,
+                    tag: tag
+                });
+            } else if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification(titulo, {
+                        body: cuerpo,
+                        icon: '/static/icon-192.png',
+                        tag: tag
+                    });
+                } catch(e) {}
+            }
         }
 
         function verificarPedidosNuevos() {
             fetch('/abuela/pedidos_pendientes')
                 .then(r => r.json())
                 .then(data => {
+                    // Verificar alerta de productos agotados
+                    if (data.agotados && Array.isArray(data.agotados)) {
+                        data.agotados.forEach(prodAgotado => {
+                            if (!agotadosConocidos.has(prodAgotado)) {
+                                emitirAlertaSistema('⚠️ ¡PRODUCTO AGOTADO!', 'Se acabaron las unidades de ' + prodAgotado, 'agotado-' + prodAgotado);
+                                agotadosConocidos.add(prodAgotado);
+                            }
+                        });
+                    }
+
+                    // Verificar pedidos nuevos
                     if (!data.pedidos) return;
                     let nuevos = data.pedidos.filter(p => !pedidosConocidos.has(p.id));
                     if (nuevos.length > 0) {
-                        // 1. Vibración del teléfono (patrón alerta)
-                        if (navigator.vibrate) {
-                            navigator.vibrate([300, 100, 300, 100, 500]);
-                        }
-
-                        // 2. Notificación del sistema (banner en teléfono / pantalla bloqueada)
                         let textoResumen = nuevos.map(p => p.cliente + ': ' + p.descripcion).join(' | ');
-                        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                            navigator.serviceWorker.controller.postMessage({
-                                type: 'NUEVO_PEDIDO',
-                                titulo: '🔔 ¡NUEVO PEDIDO DE YOGUR!',
-                                cuerpo: textoResumen
-                            });
-                        } else if ('Notification' in window && Notification.permission === 'granted') {
-                            new Notification('🔔 ¡NUEVO PEDIDO DE YOGUR!', {
-                                body: textoResumen,
-                                icon: '/static/icon-192.png'
-                            });
-                        }
+                        
+                        // Emitir alerta completa (vibración + campana + banner)
+                        emitirAlertaSistema('🔔 ¡NUEVO PEDIDO DE YOGUR!', textoResumen, 'pedido-' + Date.now());
 
-                        // 3. Sonar chime alegre
-                        reproducirChime();
-
-                        // 4. Leer pedido en voz alta para la abuela
+                        // Leer en voz alta para la abuela
                         setTimeout(() => {
                             let textoCompleto = nuevos.map(p =>
                                 'Nuevo pedido de ' + p.cliente + '. Quieren ' + p.descripcion
@@ -274,16 +318,16 @@
                             msg.onend = () => window.location.reload();
                             window.speechSynthesis.speak(msg);
                             setTimeout(() => window.location.reload(), 12000);
-                        }, 600);
+                        }, 500);
                     }
                     data.pedidos.forEach(p => pedidosConocidos.add(p.id));
                 })
                 .catch(() => {});
         }
 
-        // Iniciar polling automático inmediato cada 12 segundos
-        setInterval(verificarPedidosNuevos, 12000);
-        setTimeout(verificarPedidosNuevos, 2000);
+        // Iniciar polling automático cada 10 segundos
+        setInterval(verificarPedidosNuevos, 10000);
+        setTimeout(verificarPedidosNuevos, 1500);
 
         /* ── Registro de App Móvil (PWA) ── */
         if ('serviceWorker' in navigator) {

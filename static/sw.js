@@ -1,9 +1,10 @@
 // Service Worker para Yogures Alba PWA
-const CACHE_NAME = 'yogures-alba-v2';
+const CACHE_NAME = 'yogures-alba-v3';
 const ASSETS = [
   '/static/manifest.json',
   '/static/icon-192.png',
-  '/static/icon-512.png'
+  '/static/icon-512.png',
+  '/static/campana.wav'
 ];
 
 self.addEventListener('install', event => {
@@ -28,16 +29,18 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Notificaciones del sistema
+// Notificaciones del sistema (estilo WhatsApp / Red Social)
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'NUEVO_PEDIDO') {
+  if (event.data && event.data.type === 'NOTIFICACION') {
     self.registration.showNotification(event.data.titulo, {
       body: event.data.cuerpo,
       icon: '/static/icon-192.png',
       badge: '/static/icon-192.png',
-      vibrate: [300, 150, 300, 150, 500],
-      tag: 'pedido-' + Date.now(),
-      renotify: true
+      vibrate: [500, 150, 500, 150, 500],
+      requireInteraction: true,
+      tag: event.data.tag || ('notif-' + Date.now()),
+      renotify: true,
+      data: { url: '/abuela' }
     });
   }
 });
@@ -45,7 +48,7 @@ self.addEventListener('message', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(clientList => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
       for (const client of clientList) {
         if (client.url.includes('/abuela') && 'focus' in client) {
           return client.focus();
