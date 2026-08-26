@@ -512,6 +512,14 @@ def guardar_suscripcion():
     return jsonify({"mensaje": "Suscripción registrada exitosamente"})
 
 
+@app.route('/abuela/probar_push', methods=['POST'])
+def probar_push():
+    if not session.get("abuela_autenticada"):
+        return jsonify({"error": "No autorizado"}), 401
+    enviar_web_push_async("🍓 ¡Prueba de Notificación!", "Las notificaciones en reposo están 100% activadas en este teléfono")
+    return jsonify({"mensaje": "Notificación de prueba enviada"})
+
+
 if __name__ == '__main__':
     iniciar_base_datos()
     app.run(debug=True, host='0.0.0.0', port=5000)
