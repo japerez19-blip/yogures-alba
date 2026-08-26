@@ -5,15 +5,14 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-
 jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -24,8 +23,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
+
+      - name: Configure Bubblewrap paths
+        run: |
+          mkdir -p ~/.bubblewrap
+          bubblewrap updateConfig --jdkPath="$JAVA_HOME" --androidSdkPath="$ANDROID_HOME"
+          bubblewrap doctor || true
 
       - name: Generate signing keystore
         run: |
@@ -34,74 +42,83 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -keystore android.keystore \
+            -keystore ./android.keystore \
             -storepass yogures123456 \
             -keypass yogures123456 \
             -dname "CN=Yogures Alba, OU=Dev, O=YoguresAlba, L=Caracas, ST=Miranda, C=VE"
+          
+          # Print SHA-256 fingerprint for AssetLinks
+          echo "=== SHA-256 Certificate Fingerprint ==="
+          keytool -list -v -keystore ./android.keystore -alias yogures-alba -storepass yogures123456 | grep "SHA256:" || true
 
-      - name: Initialize and build TWA
+      - name: Ensure twa-manifest.json has correct keystore path
         run: |
-          # Accept Bubblewrap defaults non-interactively
-          echo "" | bubblewrap init --manifest="https://tienda-abuela.onrender.com/static/manifest.json" || true
-
-          # Overwrite signing config
-          if [ -f twa-manifest.json ]; then
-            # Update signing key path in the generated manifest
-            cat twa-manifest.json | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          data['signingKey'] = {'path': '${{ github.workspace }}/android.keystore', 'alias': 'yogures-alba'}
+          python3 -c "
+          import json
+          with open('twa-manifest.json', 'r') as f:
+              data = json.load(f)
+          data['signingKey'] = {
+              'path': './android.keystore',
+              'alias': 'yogures-alba'
+          }
           data['enableNotifications'] = True
-          json.dump(data, sys.stdout, indent=2)
-          " > twa-manifest-updated.json
-            mv twa-manifest-updated.json twa-manifest.json
+          with open('twa-manifest.json', 'w') as f:
+              json.dump(data, f, indent=2)
+          "
+          cat twa-manifest.json
+
+      - name: Build APK with Bubblewrap
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: yogures123456
+          BUBBLEWRAP_KEY_PASSWORD: yogures123456
+        run: |
+          bubblewrap build --skipPwaValidation || true
+
+      - name: Fallback Gradle Build (if needed)
+        run: |
+          if [ ! -f "app-release-signed.apk" ] && [ ! -f "app-release.apk" ]; then
+            echo "Searching for Gradle build files in subdirectories..."
+            if [ -f "gradlew" ]; then
+              chmod +x gradlew
+              ./gradlew assembleRelease || ./gradlew assembleDebug || true
+            elif [ -d "app" ] && [ -f "app/build.gradle" ]; then
+              chmod +x gradlew 2>/dev/null || true
+              ./gradlew assembleRelease 2>/dev/null || ./gradlew assembleDebug 2>/dev/null || true
+            fi
           fi
 
-          # Build the APK
-          bubblewrap build \
-            --skipPwaValidation \
-            --signingKeyPath "${{ github.workspace }}/android.keystore" \
-            --signingKeyAlias yogures-alba \
-            --signingKeyPassword yogures123456 \
-            --keystorePassword yogures123456 \
-            2>&1 || true
-
-      - name: List build outputs
+      - name: Locate and Package APK
         run: |
-          echo "=== All APK files ==="
-          find . -name "*.apk" -type f 2>/dev/null
-          echo "=== All AAB files ==="
-          find . -name "*.aab" -type f 2>/dev/null
-          echo "=== app/build directory ==="
-          find ./app/build -type f 2>/dev/null | head -30 || echo "No app/build dir"
-
-      - name: Collect APK
-        run: |
-          APK=$(find . -name "*.apk" -type f | head -1)
-          if [ -n "$APK" ]; then
-            cp "$APK" yogures-alba.apk
-            echo "APK_READY=true" >> $GITHUB_ENV
-            echo "Found APK: $APK"
+          echo "=== All files generated ==="
+          find . -name "*.apk" -type f
+          
+          # Prioritize signed release, then any release, then any apk
+          APK_FILE=$(find . -name "*signed*.apk" -o -name "*release*.apk" -o -name "*.apk" | head -1)
+          
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            echo "Found APK at: $APK_FILE"
+            cp "$APK_FILE" yogures-alba.apk
+            echo "APK_SUCCESS=true" >> $GITHUB_ENV
             ls -lh yogures-alba.apk
           else
-            echo "APK_READY=false" >> $GITHUB_ENV
-            echo "No APK found"
+            echo "ERROR: No APK was generated!"
+            echo "APK_SUCCESS=false" >> $GITHUB_ENV
           fi
 
-      - name: Upload APK artifact
-        if: env.APK_READY == 'true'
+      - name: Upload APK Artifact
+        if: env.APK_SUCCESS == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: yogures-alba-apk
           path: yogures-alba.apk
           retention-days: 90
 
-      - name: Upload full build log
+      - name: Upload Build Logs & Outputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
             twa-manifest.json
-            app/build/outputs/
+            android.keystore
           retention-days: 7
