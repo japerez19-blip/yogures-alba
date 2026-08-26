@@ -1,5 +1,5 @@
 // Service Worker para Yogures Alba PWA
-const CACHE_NAME = 'yogures-alba-v1';
+const CACHE_NAME = 'yogures-alba-v2';
 const ASSETS = [
   '/static/manifest.json',
   '/static/icon-192.png',
@@ -23,8 +23,37 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Red de primero con respaldo para páginas dinámicas
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+
+// Notificaciones del sistema
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'NUEVO_PEDIDO') {
+    self.registration.showNotification(event.data.titulo, {
+      body: event.data.cuerpo,
+      icon: '/static/icon-192.png',
+      badge: '/static/icon-192.png',
+      vibrate: [300, 150, 300, 150, 500],
+      tag: 'pedido-' + Date.now(),
+      renotify: true
+    });
+  }
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes('/abuela') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/abuela');
+      }
+    })
   );
 });
