@@ -31,6 +31,7 @@
       ]
     },
     "plugins": [
+      "./plugins/withFirebaseManifestFix.js",
       "@react-native-firebase/app",
       [
         "expo-notifications",
@@ -41,6 +42,7 @@
         }
       ]
     ]
+
   }
 }
 
