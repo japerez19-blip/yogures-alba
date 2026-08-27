@@ -50,3 +50,4 @@ export const api = {
     await apiClient.post('/abuela/actualizar_stock', { id, delta });
   },
 };
+

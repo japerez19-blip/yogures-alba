@@ -3,7 +3,9 @@
     "name": "Yogures Alba Admin",
     "slug": "yogures-alba-admin",
     "version": "1.0.0",
+    "entryPoint": "./index.js",
     "orientation": "portrait",
+
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -41,3 +43,4 @@
     ]
   }
 }
+
