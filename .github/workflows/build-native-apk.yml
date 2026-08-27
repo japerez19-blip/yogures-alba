@@ -1,0 +1,94 @@
+name: Build Pure Native APK (Expo & Firebase) - Yogures Alba Admin
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-native-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK Environment
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/build-tools/34.0.0" >> $GITHUB_PATH
+
+      - name: Install Dependencies
+        working-directory: ./admin-app
+        run: |
+          npm install
+
+      - name: Expo Prebuild (Generate Native Android Project)
+        working-directory: ./admin-app
+        run: |
+          npx expo prebuild --platform android --clean
+          cp google-services.json android/app/google-services.json
+
+      - name: Generate Signing Keystore
+        working-directory: ./admin-app
+        run: |
+          keytool -genkeypair \
+            -alias yogures-alba \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore android.keystore \
+            -storepass yogures123456 \
+            -keypass yogures123456 \
+            -dname "CN=Yogures Alba Admin, OU=Dev, O=YoguresAlba, L=Caracas, ST=Miranda, C=VE"
+
+      - name: Build Native Release APK with Gradle
+        working-directory: ./admin-app/android
+        run: |
+          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Align and Sign APK with apksigner (v2/v3 scheme)
+        working-directory: ./admin-app
+        run: |
+          APK_RAW=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          echo "Raw APK found at: $APK_RAW"
+          
+          # 1. Zipalign
+          /usr/local/lib/android/sdk/build-tools/34.0.0/zipalign -v -p 4 "$APK_RAW" aligned.apk
+          
+          # 2. Sign with apksigner
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign \
+            --ks android.keystore \
+            --ks-key-alias yogures-alba \
+            --ks-pass pass:yogures123456 \
+            --key-pass pass:yogures123456 \
+            --out yogures-alba-admin.apk \
+            aligned.apk
+          
+          # 3. Verify signature
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner verify --verbose yogures-alba-admin.apk
+          
+          echo "Native APK successfully signed and verified! Size:"
+          ls -lh yogures-alba-admin.apk
+
+      - name: Upload Native APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yogures-alba-admin-apk
+          path: admin-app/yogures-alba-admin.apk
+          retention-days: 90

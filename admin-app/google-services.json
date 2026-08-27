@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "178017411954",
+    "project_id": "yogures-alba",
+    "storage_bucket": "yogures-alba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:178017411954:android:52e775324ee739d22c73eb",
+        "android_client_info": {
+          "package_name": "com.yoguresalba.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1bmHFwtMViWw6eHBYq6DRJLA25Dsm9h0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
